@@ -1,0 +1,11 @@
+build/
+build_*/
+.vs/
+*.obj
+*.lib
+*.exe
+*.pdb
+*.ilk
+__pycache__/
+tests/bench/*.png
+!tests/bench/.gitkeep

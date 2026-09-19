@@ -1,0 +1,117 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # 03:00 UTC daily
+  workflow_dispatch:
+
+concurrency:
+  group: nightly
+  cancel-in-progress: true
+
+permissions:
+  contents: write # gh-pages benchmark chart push
+
+jobs:
+  bench:
+    name: bench-${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            os: ubuntu-latest
+            cc: gcc
+          - name: macos-arm64
+            os: macos-14
+            cc: clang
+          - name: windows-x64
+            os: windows-latest
+            cc: cl
+          - name: windows-arm64
+            os: windows-11-arm
+            cc: cl
+          - name: linux-arm64
+            os: ubuntu-24.04-arm
+            cc: gcc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Pillow (deterministic bench images)
+        run: python -m pip install --quiet pillow
+
+      - name: Generate benchmark images
+        run: python tests/gen_bench.py
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+        env:
+          CC: ${{ matrix.cc }}
+
+      - name: Build
+        run: cmake --build build --config Release --parallel 2
+
+      - name: Correctness first (a fast benchmark is worthless if wrong)
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Benchmark vs libpng
+        run: >
+          ./build/bench_compare ${{ matrix.name }} bench_${{ matrix.name }}.json
+          tests/bench/photo_rgb8.png
+          tests/bench/photo_rgba8.png
+          tests/bench/photo_gray8.png
+          tests/bench/photo_gray16.png
+          tests/bench/graphic_pal8.png
+          tests/bench/graphic_rgb8.png
+        shell: bash
+
+      - name: CPU feature report
+        run: ./build/ptpng_tool tests/bench/photo_rgb8.png --info
+        shell: bash
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bench-${{ matrix.name }}
+          path: bench_${{ matrix.name }}.json
+
+  charts:
+    name: update performance charts
+    needs: bench
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: benches
+          merge-multiple: true
+
+      - name: Merge per-platform results
+        run: |
+          python3 - <<'EOF'
+          import json, glob
+          merged = []
+          for f in glob.glob('benches/bench_*.json'):
+              merged += json.load(open(f))
+          json.dump(merged, open('bench.json', 'w'), indent=1)
+          print(f"merged {len(merged)} benchmark entries")
+          EOF
+
+      - uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: ptpng vs libpng (nightly)
+          tool: customBiggerIsBetter
+          output-file-path: bench.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          gh-pages-branch: gh-pages
+          benchmark-data-dir-path: bench/
+          max-items-in-chart: 200
+          alert-threshold: "120%"
+          comment-on-alert: true
+          fail-on-alert: false
