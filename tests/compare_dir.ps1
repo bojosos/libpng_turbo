@@ -23,3 +23,4 @@ foreach ($tag in $formats) {
     }
 }
 "pass=$pass fail=$fail"
+if ($fail -gt 0 -or $pass -eq 0) { exit 1 }

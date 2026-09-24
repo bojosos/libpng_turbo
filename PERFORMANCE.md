@@ -14,6 +14,9 @@ the speed of a complete PNG decode or a lead over every other decoder.
   of copies per fixed block and 24 KiB of unused fixed-table storage.
 - The SSE2 fallback no longer contains SSSE3 instructions. The ARM scalar
   Sub fallback now uses the correct recurrence.
+- Long x86 rows with 2-, 4- or 8-byte pixels retain the established
+  blocked SSE2 path after local measurements showed possible regressions
+  with the new fused path. RGB and 16-bit RGB use the new implementation.
 - RGB16-to-RGBA8 conversion no longer loads beyond its source tail.
 
 ## Fixed-block measurement
@@ -76,6 +79,14 @@ pixel. RGB was 7414.9 versus 546.9 MB/s. This comparison isolates the
 filter; it is not a before/after whole-image speedup. RGBA8 output also
 lost to libpng+zlib-ng on palette graphics and RGB graphics, so conversion
 and match-heavy images remain useful optimization targets.
+
+The Linux x64 AVX2 runner measured 4096-byte RGB Sub at 17.33 GB/s
+versus 2.19 GB/s in the scalar kernel, and 16-bit RGB at 17.33 versus
+3.00 GB/s. Whole-image performance still varied: native photo RGB was
+178.06 versus 170.16 MPix/s against libpng+zlib-ng, while photo RGBA was
+59.93 versus 75.93 and RGB graphics were 376.33 versus 947.40 MPix/s.
+These losses matter more than the isolated filter wins when deciding
+what to optimize next.
 
 `tests/gen_bench.py` creates a deterministic synthetic image corpus with
 Pillow. `bench_compare` compares ptpng with libpng and stock zlib;

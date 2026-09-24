@@ -58,6 +58,13 @@ void ptpng_filter_sub_avx2(uint8_t *dst, const uint8_t *src,
 {
     uint8_t *row = dst;
     (void)prev;
+    /* Keep the established SSE2 kernel for long, register-aligned pixels.
+     * Fusing the copy regresses these strides on some x86 processors. */
+    if (count >= 256 && (bpp == 2 || bpp == 4 || bpp == 8)) {
+        memmove(dst, src, count);
+        ptpng_sub_blocked_sse2(dst, count, bpp);
+        return;
+    }
     if (bpp == 1) {
         /* note: _mm256_slli_si256 shifts per 128-bit lane, so the
          * in-register doubling yields two independent 16-byte prefixes;
