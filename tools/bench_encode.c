@@ -239,11 +239,17 @@ int main(int argc, char **argv)
             snprintf(name, sizeof(name), "%s / %s / %s encode time", tag,
                      basename_portable(argv[arg]), methods[m]);
             fprintf(json, "  {\"name\":"); json_string(json, name);
-            fprintf(json, ",\"unit\":\"ms\",\"value\":%.6f},\n", ms);
+            fprintf(json, ",\"unit\":\"ms\",\"value\":%.6f,"
+                    "\"extra\":\"Encoded color type %u, %u-bit samples; median of five rotated rounds; "
+                    "palette/packed inputs expand to RGBA8 for all encoders\"},\n",
+                    ms, (unsigned)im.color_type, (unsigned)im.bit_depth);
             snprintf(name, sizeof(name), "%s / %s / %s encoded size", tag,
                      basename_portable(argv[arg]), methods[m]);
             fprintf(json, "  {\"name\":"); json_string(json, name);
-            fprintf(json, ",\"unit\":\"bytes\",\"value\":%zu}", encoded_n[m]);
+            fprintf(json, ",\"unit\":\"bytes\",\"value\":%zu,"
+                    "\"extra\":\"Encoded color type %u, %u-bit samples; "
+                    "palette/packed inputs expand to RGBA8 for all encoders\"}",
+                    encoded_n[m], (unsigned)im.color_type, (unsigned)im.bit_depth);
         }
         ptpng_free(pixels); ptpng_info_free(&im);
         fflush(stdout);

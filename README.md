@@ -131,7 +131,8 @@ a compression buffer bounded by stored DEFLATE size, and the final PNG.
 `bench_encode` and `bench_encode_zlibng` compare the encoder with libpng
 at compression levels 1 and 6. They report median time and output bytes
 for the same pixels, including allocations and checksums. Smaller files
-and faster encodes are separate results. Example:
+and faster encodes are separate results. Palette and packed input images
+expand to RGBA8 for both encoders in this comparison. Example:
 
 ```sh
 ./build/bench_encode local encode.json tests/bench/photo_rgb8.png
