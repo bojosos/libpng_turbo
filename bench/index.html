@@ -110,6 +110,11 @@
         <a id="repository-link" rel="noopener"></a>
       </div>
     </header>
+    <p>Hosted runners can change between runs. Start with the within-run speed ratios below;
+      1× means equal throughput. Ratios reduce machine variation but do not replace paired
+      old/new tests on one machine. Expand raw results for absolute throughput and encoding
+      time/size. The memory-copy measurement is a reference, not a theoretical PNG ceiling.
+      New results include runner details in their tooltips and downloadable data.</p>
     <main id="main"></main>
     <footer>
       <button id="dl-button">Download data as JSON</button>
@@ -182,10 +187,25 @@
           };
 
           // Prepare data points for charts
-          return Object.keys(data.entries).map(name => ({
-            name,
-            dataSet: collectBenchesPerTestCase(data.entries[name]),
-          }));
+          const ratios = [];
+          for (const entries of Object.values(data.entries)) {
+            for (const entry of entries) {
+              const byName = new Map(entry.benches.map(b => [b.name, b]));
+              const benches = [];
+              for (const bench of entry.benches) {
+                if (!bench.name.includes('/ptpng-vs-') || bench.unit !== 'MPix/s') continue;
+                const ref = byName.get(bench.name.replace('/ptpng-vs-', '/'));
+                if (!ref || !(ref.value > 0)) continue;
+                benches.push({name: bench.name.replace('/ptpng-vs-', '/speedup-over-'),
+                  unit: '× reference throughput', value: bench.value / ref.value,
+                  extra: bench.value + ' vs ' + ref.value + ' MPix/s\n' + (bench.extra || '')});
+              }
+              if (benches.length) ratios.push({...entry, benches});
+            }
+          }
+          return [{name: 'Within-run decoder speedup', dataSet: collectBenchesPerTestCase(ratios)},
+            ...Object.keys(data.entries).map(name => ({name, raw: true,
+              dataSet: collectBenchesPerTestCase(data.entries[name])}))];
         }
 
         function renderAllChars(dataSets) {
@@ -204,6 +224,7 @@
                   data: dataset.map(d => d.bench.value),
                   borderColor: color,
                   backgroundColor: color + '60', // Add alpha for #rrggbbaa
+                  lineTension: 0,
                 }
               ],
             };
@@ -289,8 +310,21 @@
           }
 
           const main = document.getElementById('main');
-          for (const {name, dataSet} of dataSets) {
-            renderBenchSet(name, dataSet, main);
+          for (const {name, dataSet, raw} of dataSets) {
+            if (raw) {
+              const details = document.createElement('details');
+              const summary = document.createElement('summary');
+              summary.textContent = 'Raw results: ' + name;
+              details.appendChild(summary);
+              main.appendChild(details);
+              // Build charts only when visible so canvas dimensions are correct.
+              details.addEventListener('toggle', () => {
+                if (details.open && !details.dataset.rendered) {
+                  renderBenchSet(name, dataSet, details);
+                  details.dataset.rendered = 'true';
+                }
+              });
+            } else renderBenchSet(name, dataSet, main);
           }
         }
 
