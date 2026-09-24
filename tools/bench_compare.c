@@ -162,10 +162,73 @@ static const char *base_name(const char *p)
     return a ? a + 1 : p;
 }
 
+static double median12(double values[12])
+{
+    int i, j;
+    for (i = 1; i < 12; ++i) {
+        double value = values[i];
+        for (j = i; j > 0 && values[j-1] > value; --j) values[j] = values[j-1];
+        values[j] = value;
+    }
+    return (values[5] + values[6])/2;
+}
+
+static int bench_pair(const uint8_t *data, size_t size, int format,
+                       double *pt, double *ref)
+{
+    double pt_times[12], ref_times[12];
+    size_t pt_len = 0, ref_len = 0;
+    int i;
+    /* Warm both decoders; alternate order each round to reduce clock/load drift. */
+    if (bench_ptpng(data, size, format, 1, &pt_len) <= 0 ||
+        bench_libpng(data, size, format, 1, &ref_len) <= 0) return 0;
+    for (i = 0; i < 12; ++i) {
+        if (i & 1) {
+            ref_times[i] = bench_libpng(data, size, format, 1, &ref_len);
+            pt_times[i] = bench_ptpng(data, size, format, 1, &pt_len);
+        } else {
+            pt_times[i] = bench_ptpng(data, size, format, 1, &pt_len);
+            ref_times[i] = bench_libpng(data, size, format, 1, &ref_len);
+        }
+        if (pt_times[i] <= 0 || ref_times[i] <= 0 || pt_len != ref_len) return 0;
+    }
+    *pt = median12(pt_times); *ref = median12(ref_times);
+    return 1;
+}
+
+/* A measured copy reference, not a theoretical PNG limit. Warm buffers,
+ * 128 MiB total working set; report payload bytes, not read+write traffic.
+ * The volatile function pointer keeps every copy observable to the compiler. */
+static double bench_memory_copy(void)
+{
+    const size_t size = 64u << 20;
+    uint8_t *src = (uint8_t *)malloc(size), *dst = (uint8_t *)malloc(size);
+    void *(*volatile copy_fn)(void *, const void *, size_t) = memcpy;
+    double samples[5];
+    int i, j;
+    if (!src || !dst) { free(src); free(dst); return -1; }
+    memset(src, 73, size);
+    memset(dst, 0, size);
+    copy_fn(dst, src, size);
+    for (i = 0; i < 5; ++i) {
+        double start = now_sec();
+        for (j = 0; j < 8; ++j) copy_fn(dst, src, size);
+        samples[i] = now_sec()-start;
+    }
+    if (memcmp(dst, src, size)) { free(src); free(dst); return -1; }
+    free(src); free(dst);
+    for (i = 1; i < 5; ++i) {
+        double value = samples[i];
+        for (j = i; j > 0 && samples[j-1] > value; --j) samples[j] = samples[j-1];
+        samples[j] = value;
+    }
+    return samples[2] > 0 ? 8.0*size/samples[2]/1e6 : -1;
+}
+
 int main(int argc, char **argv)
 {
     const char *tag, *outfile;
-    int i, iters = 12;
+    int i;
     FILE *js;
     if (argc < 4) {
         fprintf(stderr, "usage: bench_compare <tag> <out.json> <img...>\n");
@@ -174,12 +237,22 @@ int main(int argc, char **argv)
     tag = argv[1];
     outfile = argv[2];
     printf("ptpng %s | features: %s\n", ptpng_version(), ptpng_features());
+    printf("12 alternating rounds after warm-up; median elapsed time; output free excluded\n");
 
     js = fopen(outfile, "w");
     if (!js) { perror(outfile); return 2; }
     fprintf(js, "[\n");
+    {
+        double bandwidth = bench_memory_copy();
+        if (bandwidth <= 0) { fclose(js); return 1; }
+        printf("warm 64 MiB memcpy: %.2f MB/s payload (reference, not a PNG ceiling)\n", bandwidth);
+        fprintf(js, "{\"name\":\"%s/memory-copy-vs-" REF_LABEL "/64MiB\","
+                    "\"unit\":\"MB/s\",\"value\":%.2f,\"extra\":\"Warm buffers; 128 MiB working set; "
+                    "median of five batches; payload bytes only; measured reference, not a theoretical limit\"},\n",
+                    tag, bandwidth);
+    }
     for (i = 3; i < argc; i++) {
-        size_t size, pt_len = 0, lp_len = 0;
+        size_t size;
         uint8_t *data = (uint8_t *)read_file(argv[i], &size);
         const char *nm = base_name(argv[i]);
         char clean[128];
@@ -210,18 +283,8 @@ int main(int argc, char **argv)
         dot = strrchr(clean, '.');
         if (dot) *dot = 0;
 
-        tpt_n = bench_ptpng(data, size, PTPNG_OUT_NATIVE, iters, &pt_len);
-        tlp_n = bench_libpng(data, size, 0, iters, &lp_len);
-        if (pt_len != lp_len) {
-            fprintf(stderr, "native output size mismatch for %s\n", nm);
-            free(data);
-            fclose(js);
-            return 1;
-        }
-        tpt_r = bench_ptpng(data, size, PTPNG_OUT_RGBA8, iters, &pt_len);
-        tlp_r = bench_libpng(data, size, 1, iters, &lp_len);
-        if (tpt_n <= 0 || tlp_n <= 0 || tpt_r <= 0 || tlp_r <= 0 ||
-            pt_len != lp_len) {
+        if (!bench_pair(data, size, PTPNG_OUT_NATIVE, &tpt_n, &tlp_n) ||
+            !bench_pair(data, size, PTPNG_OUT_RGBA8, &tpt_r, &tlp_r)) {
             fprintf(stderr, "benchmark decode failed for %s\n", nm);
             free(data);
             fclose(js);

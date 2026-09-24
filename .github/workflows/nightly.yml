@@ -62,6 +62,9 @@ jobs:
       - name: Correctness first (a fast benchmark is worthless if wrong)
         run: ctest --test-dir build -C Release --output-on-failure
 
+      - name: Record benchmark machine
+        run: python tools/bench_metadata.py machine_${{ matrix.name }}.json
+
       - name: Benchmark vs libpng (zlib) and libpng (zlib-ng)
         run: |
           ./build/bench_compare ${{ matrix.name }} bench_${{ matrix.name }}.json \
@@ -78,6 +81,18 @@ jobs:
             tests/bench/photo_gray16.png \
             tests/bench/graphic_pal8.png \
             tests/bench/graphic_rgb8.png
+        shell: bash
+
+      - name: Encoder speed and output size
+        run: |
+          ./build/bench_encode ${{ matrix.name }} encode_${{ matrix.name }}.json \
+            tests/bench/photo_rgb8.png tests/bench/photo_rgba8.png \
+            tests/bench/photo_gray8.png tests/bench/photo_gray16.png \
+            tests/bench/graphic_pal8.png tests/bench/graphic_rgb8.png
+          ./build/bench_encode_zlibng ${{ matrix.name }} encode_${{ matrix.name }}_zng.json \
+            tests/bench/photo_rgb8.png tests/bench/photo_rgba8.png \
+            tests/bench/photo_gray8.png tests/bench/photo_gray16.png \
+            tests/bench/graphic_pal8.png tests/bench/graphic_rgb8.png
         shell: bash
 
       - name: Filter throughput (scalar and dispatched)
@@ -97,6 +112,9 @@ jobs:
             bench_${{ matrix.name }}.json
             bench_${{ matrix.name }}_zng.json
             filters_${{ matrix.name }}.txt
+            encode_${{ matrix.name }}.json
+            encode_${{ matrix.name }}_zng.json
+            machine_${{ matrix.name }}.json
 
   charts:
     name: update performance charts
@@ -111,15 +129,7 @@ jobs:
           merge-multiple: true
 
       - name: Merge per-platform results
-        run: |
-          python3 - <<'EOF'
-          import json, glob
-          merged = []
-          for f in glob.glob('benches/bench_*.json'):
-              merged += json.load(open(f))
-          json.dump(merged, open('bench.json', 'w'), indent=1)
-          print(f"merged {len(merged)} benchmark entries")
-          EOF
+        run: python3 tools/merge_bench.py
 
       - name: Verify zlib-ng results have distinct series names
         run: python3 -c "import json; d=json.load(open('bench.json')); names=set(e['name'] for e in d); assert any('libpng-zng' in n for n in names), names; print(len(names), 'series')"
@@ -146,5 +156,18 @@ jobs:
           benchmark-data-dir-path: bench/
           max-items-in-chart: 200
           alert-threshold: "120%"
+          comment-on-alert: false
+          fail-on-alert: false
+
+      - uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: PNG encoding time and size (nightly)
+          tool: customSmallerIsBetter
+          output-file-path: encode.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          gh-pages-branch: gh-pages
+          benchmark-data-dir-path: bench/
+          max-items-in-chart: 200
           comment-on-alert: false
           fail-on-alert: false

@@ -12,7 +12,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<0:>")
 
 # ---- the library -------------------------------------------------------
 set(PTPNG_SOURCES src/ptpng.c src/ptpng_inflate.c src/ptpng_crc.c
-                  src/ptpng_filters.c)
+                  src/ptpng_filters.c src/ptpng_encode.c src/ptpng_deflate.c)
 
 set(PTPNG_PROCESSOR "${CMAKE_SYSTEM_PROCESSOR}")
 if(CMAKE_GENERATOR_PLATFORM)
@@ -34,17 +34,17 @@ if(PTPNG_X86)
     # AVX2 translation unit: compiled with its own ISA flag; all code in
     # it is behind runtime dispatch (ptpng_avx2_init checks CPUID).
     if(MSVC)
-        set_source_files_properties(src/ptpng_avx2.c PROPERTIES
+        set_source_files_properties(src/ptpng_avx2.c src/ptpng_encode_avx2.c PROPERTIES
                                     COMPILE_OPTIONS "/arch:AVX2")
     else()
-        set_source_files_properties(src/ptpng_avx2.c PROPERTIES
+        set_source_files_properties(src/ptpng_avx2.c src/ptpng_encode_avx2.c PROPERTIES
                                     COMPILE_OPTIONS "-mavx2")
     endif()
-    target_sources(ptpng PRIVATE src/ptpng_avx2.c)
+    target_sources(ptpng PRIVATE src/ptpng_avx2.c src/ptpng_encode_avx2.c)
 elseif(PTPNG_ARM)
     # NEON is baseline on aarch64; no extra flags needed. ptpng_neon.c
     # compiles to an empty TU if NEON is unavailable (armv7 without it).
-    target_sources(ptpng PRIVATE src/ptpng_neon.c)
+    target_sources(ptpng PRIVATE src/ptpng_neon.c src/ptpng_encode_neon.c)
 endif()
 
 if(MSVC)
@@ -56,7 +56,7 @@ else()
 endif()
 
 # ---- the CLI tool and unit testers -------------------------------------
-set(PTPNG_TOOLS ptpng_tool filters_test sums_test inflate_test inf_bench fuzz_png decoder_test)
+set(PTPNG_TOOLS ptpng_tool filters_test sums_test inflate_test inf_bench fuzz_png decoder_test encoder_test encoder_filters_test deflate_test)
 foreach(tgt ${PTPNG_TOOLS})
     add_executable(${tgt} tools/${tgt}.c)
     target_link_libraries(${tgt} PRIVATE ptpng)
@@ -76,6 +76,9 @@ enable_testing()
 add_test(NAME unit COMMAND filters_test)
 add_test(NAME sums COMMAND sums_test)
 add_test(NAME decoder COMMAND decoder_test)
+add_test(NAME encoder COMMAND encoder_test)
+add_test(NAME encoder_filters COMMAND encoder_filters_test)
+add_test(NAME deflate COMMAND deflate_test)
 
 # ---- reference build (zlib + libpng) and parity/bench tools ------------
 if(PTPNG_WITH_LIBPNG)
@@ -153,11 +156,16 @@ if(PTPNG_WITH_LIBPNG)
     set(PNG_TOOLS OFF CACHE BOOL "" FORCE)
     set(PNG_FRAMEWORK OFF CACHE BOOL "" FORCE)
     add_subdirectory(${PTPNG_LIBPNG_DIR} libpngb)
+    target_compile_definitions(encoder_test PRIVATE PTPNG_TEST_LIBPNG)
+    target_link_libraries(encoder_test PRIVATE png_static)
+    target_compile_definitions(deflate_test PRIVATE PTPNG_TEST_ZLIB)
+    target_include_directories(deflate_test PRIVATE ${ZBUILD}/inst/include)
+    target_link_libraries(deflate_test PRIVATE ${PTPNG_ZLIB_LIB})
 
     # All targets inherit the same MSVC runtime selection.
     set(PTPNG_REF_TOOLS verify_suite)
     if(PTPNG_BUILD_BENCH)
-        list(APPEND PTPNG_REF_TOOLS bench_compare)
+        list(APPEND PTPNG_REF_TOOLS bench_compare bench_encode)
     endif()
     foreach(tgt ${PTPNG_REF_TOOLS})
         add_executable(${tgt} tools/${tgt}.c)
@@ -278,6 +286,20 @@ if(PTPNG_WITH_LIBPNG)
                                    /W3 /D_CRT_SECURE_NO_WARNINGS)
                         else()
                             target_compile_options(bench_zlibng PRIVATE -Wall -Wextra)
+                        endif()
+                        add_executable(bench_encode_zlibng tools/bench_encode.c)
+                        target_compile_definitions(bench_encode_zlibng PRIVATE REF_LABEL="libpng-zng")
+                        target_include_directories(bench_encode_zlibng PRIVATE
+                            ${PTPNG_LIBPNG_DIR} ${ZNG}/inst/include ${PNGB})
+                        target_link_libraries(bench_encode_zlibng PRIVATE
+                            ptpng ${PNGNG_LIB} ${PTPNG_ZNG_LIB})
+                        if(UNIX)
+                            target_link_libraries(bench_encode_zlibng PRIVATE m)
+                        endif()
+                        if(MSVC)
+                            target_compile_options(bench_encode_zlibng PRIVATE /W3 /D_CRT_SECURE_NO_WARNINGS)
+                        else()
+                            target_compile_options(bench_encode_zlibng PRIVATE -Wall -Wextra)
                         endif()
                     endif()
                 endif()

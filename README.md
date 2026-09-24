@@ -1,9 +1,15 @@
-# ptpng: a fast single-threaded PNG decoder
+# ptpng: a fast single-threaded PNG decoder and encoder
 
 ptpng supports all PNG color types, bit depths 1/2/4/8/16, Adam7
 interlacing and tRNS. Its tests compare decoded pixels byte-for-byte with
 libpng `png_read_image()`. AVX2 paths run on supported x86 CPUs; ARM64
 builds use NEON. The library has no external runtime dependencies.
+
+The encoder accepts gray, gray+alpha, RGB and RGBA at 8 or 16 bits. It
+writes non-interlaced PNGs using sampled filter selection, AVX2/NEON
+forward filters and a bounded-search DEFLATE compressor. It prioritizes
+speed over file size. Palette input, packed samples, metadata writing
+and interlaced output are not supported by the encoder yet.
 
 Calls must be serialized across threads: the decoder shares mutable
 Huffman tables and CPU dispatch state. Optional metadata uses a bounded
@@ -97,6 +103,50 @@ expanded to alpha, 16-bit chopped via >>8) and `PTPNG_OUT_RGB8`.
 
 `ptpng_info` exposes palette, tRNS, gAMA/cHRM/sRGB/sBIT/bKGD/pHYs/tIME,
 hIST, iCCP (decompressed profile), sPLT, eXIf and tEXt/zTXt/iTXt texts.
+
+### Encoding
+
+```c
+void *png = NULL;
+size_t png_size = 0;
+/* RGBA8 pixels, tightly packed rows. NULL selects adaptive filtering. */
+int rc = ptpng_encode(pixels, pixels_size, width, height, 0,
+                      6, 8, NULL, &png, &png_size);
+if (rc == PTPNG_OK) {
+    /* Write png_size bytes from png to a file or send them to a consumer. */
+}
+ptpng_free(png);
+```
+
+`stride` accepts padded input rows; `pixels_size` must include all accessed
+bytes. For 16-bit input, samples must be big-endian. A non-NULL
+`ptpng_encode_opts` can force any PNG filter. Use
+`{PTPNG_ENCODE_FILTER_ADAPTIVE}` for the sampled default; a zero-initialized
+options struct explicitly selects None. Output contains IHDR, IDAT and
+IEND only, with CRC and Adler checksums. Invalid dimensions, input lengths
+and unsupported formats fail before reading pixels. Filtered input is
+capped at `PTPNG_DEFAULT_MAX_BYTES`. Encoding allocates a filtered image,
+a compression buffer bounded by stored DEFLATE size, and the final PNG.
+
+`bench_encode` and `bench_encode_zlibng` compare the encoder with libpng
+at compression levels 1 and 6. They report median time and output bytes
+for the same pixels, including allocations and checksums. Smaller files
+and faster encodes are separate results. Example:
+
+```sh
+./build/bench_encode local encode.json tests/bench/photo_rgb8.png
+# Windows: add --cpu 2 before the tag to pin to logical CPU 2.
+```
+
+Nightly [dark charts](https://bojosos.github.io/libpng_turbo/bench/) show
+within-run decoder ratios first. Raw results include encoder time/size
+and a measured memory-copy reference. GitHub-hosted jobs use fresh virtual
+machines, so absolute throughput is not directly comparable across runs.
+New benchmark artifacts record the CPU, OS and runner image. Ratios help
+control that variation; they do not replace alternating old/new tests on
+the same machine. The memory-copy reference is not a theoretical PNG
+limit, since compression, filtering, checksums and pixel layout change
+the work required.
 
 ## Design: where the speed comes from
 

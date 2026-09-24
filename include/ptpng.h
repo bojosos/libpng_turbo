@@ -1,11 +1,11 @@
 /*
- * ptpng.h - maximum-speed single-threaded PNG decoder.
+ * ptpng.h - single-threaded PNG decoder and fast PNG encoder.
  *
  * Decodes every valid PNG per the PNG specification (all color types,
  * bit depths 1/2/4/8/16, Adam7 interlacing, tRNS, all standard ancillary
  * chunks).  Output is byte-compatible with libpng's png_read_image().
  *
- * C11 library with no external runtime dependencies. Decode calls must
+ * C11 library with no external runtime dependencies. Library calls must
  * be serialized across threads because dispatch and inflate tables are shared.
  */
 #ifndef PTPNG_H
@@ -151,6 +151,28 @@ int ptpng_decode(const void *data, size_t size, const ptpng_opts *opts,
                  void **out, size_t *out_len, ptpng_info *info);
 
 void ptpng_free(void *p);
+
+/* Fast, non-interlaced encoder. Supports gray (0), RGB (2), gray+alpha
+ * (4), RGBA (6), at 8 or 16 bits. Samples are in PNG byte order (16-bit
+ * big-endian). No palette or ancillary metadata is written.
+ * stride=0 means tightly packed rows; pixels_size must cover every row.
+ * NULL opts selects sampled adaptive filtering. A zero-initialized opts
+ * selects None explicitly. Calls must be serialized like decode calls.
+ * On success *out is malloc'd (ptpng_free); on failure *out=NULL and
+ * *out_len=0. Both output arguments are required. Filtered input is
+ * limited to PTPNG_DEFAULT_MAX_BYTES. */
+#define PTPNG_ENCODE_FILTER_ADAPTIVE (-1)
+#define PTPNG_ENCODE_FILTER_NONE      0
+#define PTPNG_ENCODE_FILTER_SUB       1
+#define PTPNG_ENCODE_FILTER_UP        2
+#define PTPNG_ENCODE_FILTER_AVERAGE   3
+#define PTPNG_ENCODE_FILTER_PAETH     4
+typedef struct { int filter; } ptpng_encode_opts;
+
+int ptpng_encode(const void *pixels, size_t pixels_size,
+                 uint32_t width, uint32_t height, size_t stride,
+                 int color_type, int bit_depth, const ptpng_encode_opts *opts,
+                 void **out, size_t *out_len);
 
 /* "ptpng 1.1 (sse2+avx2 pclmul)" style diagnostic string */
 const char *ptpng_version(void);

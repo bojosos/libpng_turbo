@@ -62,6 +62,21 @@ int ptpng_inflate_dyn(const uint8_t *in, size_t in_len, size_t max_out,
  * overlap (dst <= src); kernels that need in-place operation (sub)
  * copy internally.
  */
+/* Forward filters: disjoint buffers; NULL prev denotes the first row. */
+typedef void (*ptpng_encode_filter_fn)(uint8_t *, const uint8_t *,
+                                      const uint8_t *, size_t, unsigned, int);
+void ptpng_encode_filter_scalar(uint8_t *, const uint8_t *, const uint8_t *,
+                                 size_t, unsigned, int);
+#if PTPNG_X86
+void ptpng_encode_filter_avx2(uint8_t *, const uint8_t *, const uint8_t *,
+                               size_t, unsigned, int);
+#endif
+#if PTPNG_ARM_NEON
+void ptpng_encode_filter_neon(uint8_t *, const uint8_t *, const uint8_t *,
+                               size_t, unsigned, int);
+#endif
+int ptpng_deflate(const uint8_t *, size_t, uint8_t **, size_t *);
+
 typedef void (*ptpng_filter_fn)(uint8_t *dst, const uint8_t *src,
                                 const uint8_t *prev, size_t count,
                                 unsigned bpp);
