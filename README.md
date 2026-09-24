@@ -259,6 +259,8 @@ supported hardware counters, `perf.data`, text reports and annotated assembly.
 When a hosted VM does not expose hardware sampling, it tries software CPU
 timer sampling and labels that fallback explicitly. Download the profile
 artifacts from the workflow run; `summary.md` lists the hot functions.
+An optional baseline commit builds a second executable for alternating,
+same-CPU comparisons, saved in `paired.md` and `paired.json`.
 
 `.github/workflows/nightly.yml` runs nightly: the full test matrix,
 then benchmarks ptpng vs **libpng+zlib** and **libpng+zlib-ng** on

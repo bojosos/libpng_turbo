@@ -146,6 +146,37 @@ static void deflate_make_codes(uint16_t literals[256], uint32_t lengths[259])
     }
 }
 
+#if PTPNG_X64
+/* Keep batching temporaries out of the usual literal/match search loop.
+ * Only long runs produced by the existing search skip use this path. */
+#if defined(_MSC_VER)
+__declspec(noinline)
+#elif defined(__GNUC__) || defined(__clang__)
+__attribute__((noinline))
+#endif
+static int deflate_literal_run(deflate_writer *w, const uint8_t *src,
+                               size_t count, const uint16_t literals[256])
+{
+    while (count >= 3) {
+        uint32_t a = literals[src[0]];
+        uint32_t b = literals[src[1]];
+        uint32_t c = literals[src[2]];
+        unsigned ab_bits = (a >> 9) + (b >> 9);
+        uint32_t codes = (a & 511u) | ((b & 511u) << (a >> 9)) |
+                         ((c & 511u) << ab_bits);
+        if (!deflate_put(w, codes, ab_bits + (c >> 9))) return 0;
+        src += 3;
+        count -= 3;
+    }
+    while (count) {
+        uint16_t code = literals[*src++];
+        if (!deflate_put(w, code & 511u, code >> 9)) return 0;
+        --count;
+    }
+    return 1;
+}
+#endif
+
 static int deflate_fixed(const uint8_t *src, size_t size,
                          deflate_writer *w, uint16_t *table,
                          unsigned hash_bits)
@@ -200,6 +231,14 @@ static int deflate_fixed(const uint8_t *src, size_t size,
         if (misses < 1984) ++misses;
         next = pos + (size - pos < 1 + (misses >> 6) ?
                       size - pos : 1 + (misses >> 6));
+#if PTPNG_X64
+        if (next - pos >= 8) {
+            if (!deflate_literal_run(w, src + pos, next - pos, literals))
+                return 0;
+            pos = next;
+            continue;
+        }
+#endif
         do {
             uint16_t code = literals[src[pos++]];
             if (!deflate_put(w, code & 511u, code >> 9)) return 0;

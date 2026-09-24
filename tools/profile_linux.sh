@@ -50,6 +50,7 @@ fi
 
 events=()
 record_event=
+requested_event=
 if (( ${#perf_cmd[@]} )); then
     "${perf_cmd[@]}" list > "$out/perf-events.txt" 2>&1 || true
     for event in cycles:u instructions:u branches:u branch-misses:u cache-references:u cache-misses:u task-clock cpu-clock; do
@@ -63,8 +64,13 @@ if (( ${#perf_cmd[@]} )); then
         if "${perf_cmd[@]}" record -q -e "$event" -F 199 --call-graph fp \
             -o "$out/probe.data" -- taskset -c "$cpu" "$driver" decode tests/bench/graphic_rgb8.png 0.1 \
             > "$out/record-probe-${event//:/_}.txt" 2>&1; then
-            record_event=$event
-            break
+            # perf may silently substitute task-clock when cycles are absent.
+            # Report the event stored in the data, not the requested name.
+            record_event=$("${perf_cmd[@]}" evlist -i "$out/probe.data" 2> "$out/evlist-errors.txt" | head -n 1)
+            if [[ -n "$record_event" ]]; then
+                requested_event=$event
+                break
+            fi
         fi
     done
 fi
@@ -72,7 +78,7 @@ if [[ -z "$record_event" ]]; then
     printf 'Perf sampling is unavailable on this runner. See permission and event probe logs. No hardware counters are inferred.\n\n' >> "$summary"
 else
     printf 'Sampling event: `%s`, 199 Hz, user stacks with frame pointers, CPU %s.\n\n' "$record_event" "$cpu" >> "$summary"
-    if [[ "$record_event" == cpu-clock:u ]]; then
+    if [[ "$record_event" == *clock* ]]; then
         printf 'The virtual machine did not expose usable cycle sampling. These are software timer samples, not hardware cycle measurements.\n\n' >> "$summary"
     fi
 fi
@@ -107,7 +113,7 @@ for workload in "${workloads[@]}"; do
         fi
     fi
     if [[ -n "$record_event" ]]; then
-        if "${perf_cmd[@]}" record -q -e "$record_event" -F 199 --call-graph fp \
+        if "${perf_cmd[@]}" record -q -e "$requested_event" -F 199 --call-graph fp \
             -o "$dir/perf.data" -- "${cmd[@]}" > "$dir/record-timing.txt" 2> "$dir/record-errors.txt"; then
             "${perf_cmd[@]}" report --stdio --no-children --percent-limit 1 \
                 -i "$dir/perf.data" > "$dir/report.txt" 2>&1 || true

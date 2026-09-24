@@ -50,6 +50,63 @@ def save_inflate(directory, stream):
     save(directory, struct.pack("<I", max(1, len(raw))) + stream)
 
 
+def png_chunk(kind, payload):
+    return (struct.pack(">I", len(payload)) + kind + payload +
+            struct.pack(">I", zlib.crc32(kind + payload)))
+
+
+def gray_icc_profile():
+    """Small ICC v2 gray display profile with D50 white and a gamma 2.2 curve."""
+    description = b"Fuzz gray profile\0"
+    white = struct.pack(">3I", 0xF6D6, 0x10000, 0xD32D)
+    tags = (
+        (b"desc", b"desc\0\0\0\0" + struct.pack(">I", len(description)) +
+         description + bytes(78)),
+        (b"cprt", b"text\0\0\0\0Public domain\0"),
+        (b"wtpt", b"XYZ \0\0\0\0" + white),
+        (b"kTRC", b"curv\0\0\0\0" + struct.pack(">IH", 1, 563)),
+    )
+    profile = bytearray(128 + 4 + 12 * len(tags))
+    struct.pack_into(">4sI4s4s4s6H4s", profile, 4, b"ptpn", 0x02100000,
+                     b"mntr", b"GRAY", b"XYZ ", 2026, 9, 25, 0, 0, 0, b"acsp")
+    profile[68:80] = white
+    struct.pack_into(">I", profile, 128, len(tags))
+    for index, (kind, payload) in enumerate(tags):
+        struct.pack_into(">4sII", profile, 132 + index * 12,
+                         kind, len(profile), len(payload))
+        profile.extend(payload)
+        profile.extend(bytes((-len(profile)) % 4))
+    struct.pack_into(">I", profile, 0, len(profile))
+    return bytes(profile)
+
+
+def metadata_seeds():
+    """Exercise accepted metadata and the 64-allocation retention boundary."""
+    def image(chunks, palette=False):
+        header = struct.pack(">IIBBBBB", 1, 1, 8, 3 if palette else 0, 0, 0, 0)
+        return (b"\x89PNG\r\n\x1a\n" + png_chunk(b"IHDR", header) + chunks +
+                png_chunk(b"IDAT", zlib.compress(b"\0\1")) + png_chunk(b"IEND", b""))
+
+    splt8 = png_chunk(b"sPLT", b"eight\0\x08" + struct.pack(">4BH", 1, 2, 3, 4, 9))
+    splt16 = png_chunk(b"sPLT", b"sixteen\0\x10" + struct.pack(">5H", 1, 2, 3, 4, 9))
+    profile = png_chunk(b"iCCP", b"gray\0\0" + zlib.compress(gray_icc_profile()))
+    compressed_text = png_chunk(b"zTXt", b"short\0\0" + zlib.compress(b"hello"))
+    # 5001 bytes forces metadata inflate to grow beyond its initial 4096-byte buffer.
+    itext = png_chunk(b"iTXt", b"long\0\1\0en\0title\0" + zlib.compress(b"x" * 5001))
+    for chunks in (splt8, splt16, profile, splt8 + splt16 + profile + compressed_text + itext):
+        yield image(chunks)
+    yield image(png_chunk(b"PLTE", b"\0\0\0\xff\xff\xff") +
+                png_chunk(b"hIST", struct.pack(">2H", 0, 1)), palette=True)
+    for count in (31, 32, 33, 80):
+        chunks = b"".join(png_chunk(b"tEXt", f"key{i}\0value".encode("ascii"))
+                          for i in range(count))
+        yield image(chunks + splt8 + profile)
+    for count in (15, 16, 17):
+        chunks = b"".join(png_chunk(b"iTXt", f"key{i}\0\0\0en\0title\0body".encode("ascii"))
+                          for i in range(count))
+        yield image(chunks + compressed_text + splt16)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
@@ -60,6 +117,8 @@ def main():
     directories = {name: args.output / name for name in ("decode", "inflate", "encode")}
     for directory in directories.values():
         directory.mkdir(parents=True, exist_ok=True)
+    for data in metadata_seeds():
+        save(directories["decode"], data)
     for root in roots:
         for path in sorted(root.rglob("*.png")):
             if path.stat().st_size > LIMIT:

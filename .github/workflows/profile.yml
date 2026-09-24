@@ -2,6 +2,11 @@ name: Linux profiling
 
 on:
   workflow_dispatch:
+    inputs:
+      baseline:
+        description: Optional baseline commit for paired timing (must include profile_png)
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -25,6 +30,11 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        if: inputs.baseline != ''
+        with:
+          ref: ${{ inputs.baseline }}
+          path: profile-baseline
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -49,6 +59,13 @@ jobs:
       - name: Collect process-scoped profiles and reports
         shell: bash
         run: bash tools/profile_linux.sh build_profile profile-results 5
+      - name: Build baseline and compare on the same CPU
+        if: inputs.baseline != ''
+        run: |
+          cmake -S profile-baseline -B build_profile_baseline -DCMAKE_BUILD_TYPE=Release -DPTPNG_WITH_LIBPNG=OFF '-DCMAKE_C_FLAGS_RELEASE=-O3 -g -DNDEBUG -fno-omit-frame-pointer'
+          cmake --build build_profile_baseline --target profile_png --parallel 2
+          git -C profile-baseline rev-parse HEAD > profile-results/baseline-revision.txt
+          python tools/compare_profiles.py build_profile_baseline/profile_png build_profile/profile_png profile-results
       - uses: actions/upload-artifact@v4
         if: always()
         with:

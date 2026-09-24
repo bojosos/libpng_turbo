@@ -46,6 +46,10 @@ flat_graphic(W, H).save(OUT / "graphic_rgb8.png", optimize=False)
 flat_graphic(W, H).convert("P", palette=Image.ADAPTIVE, colors=256).save(
     OUT / "graphic_pal8.png", optimize=False)
 photo_rgb(W, H).convert("I;16").save(OUT / "photo_gray16.png", optimize=False)
+# Independent seed keeps existing fixtures unchanged. Incompressible pixels
+# exercise literal runs and the encoder's stored-block fallback.
+Image.frombytes("RGBA", (1024, 768), random.Random(572).randbytes(1024 * 768 * 4)).save(
+    OUT / "noise_rgba8.png", compress_level=1)
 print("sizes:")
 for f in sorted(os.listdir(OUT)):
     print(" ", f, os.path.getsize(os.path.join(OUT, f)))

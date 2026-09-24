@@ -74,6 +74,65 @@ static void ptpng_filter_sub_neon(uint8_t *dst, const uint8_t *src,
 #undef SUB_BLOCKS
 #undef SUB_PREFIX
 
+/* Four- and eight-byte pixels contain independent Paeth chains. Signed
+ * 16-bit thresholds cover -510..765; equality selects a or b, never c. */
+PTPNG_API_INLINE uint16x8_t paeth_pixel_neon(uint16x8_t s, uint16x8_t a,
+                                          uint16x8_t b, uint16x8_t c)
+{
+    int16x8_t lo = vreinterpretq_s16_u16(vminq_u16(a, b));
+    int16x8_t hi = vreinterpretq_s16_u16(vmaxq_u16(a, b));
+    int16x8_t threshold = vsubq_s16(
+        vreinterpretq_s16_u16(vaddq_u16(c, vshlq_n_u16(c, 1))),
+        vreinterpretq_s16_u16(vaddq_u16(a, b)));
+    uint16x8_t predictor = vbslq_u16(vcgtq_s16(threshold, lo), c,
+                                    vreinterpretq_u16_s16(hi));
+    predictor = vbslq_u16(vcgtq_s16(hi, threshold), predictor,
+                          vreinterpretq_u16_s16(lo));
+    return vandq_u16(vaddq_u16(s, predictor), vdupq_n_u16(255));
+}
+
+static void ptpng_filter_paeth_neon(uint8_t *dst, const uint8_t *src,
+                                   const uint8_t *prev, size_t count,
+                                   unsigned bpp)
+{
+    size_t i = 0;
+    uint16x8_t a = vdupq_n_u16(0), c = vdupq_n_u16(0);
+    if (bpp == 8) {
+        for (; i + 8 <= count; i += 8) {
+            uint16x8_t b = vmovl_u8(vld1_u8(prev + i));
+            uint16x8_t s = vmovl_u8(vld1_u8(src + i));
+            a = paeth_pixel_neon(s, a, b, c);
+            c = b;
+            vst1_u8(dst + i, vmovn_u16(a));
+        }
+    } else if (bpp == 4) {
+        for (; i + 4 <= count; i += 4) {
+            uint32_t sv, bv, output;
+            uint16x8_t b, s;
+            /* Exactly four bytes are accessible at the end of a short row. */
+            memcpy(&sv, src + i, 4);
+            memcpy(&bv, prev + i, 4);
+            b = vmovl_u8(vcreate_u8(bv));
+            s = vmovl_u8(vcreate_u8(sv));
+            a = paeth_pixel_neon(s, a, b, c);
+            c = b;
+            output = vget_lane_u32(vreinterpret_u32_u8(vmovn_u16(a)), 0);
+            memcpy(dst + i, &output, 4);
+        }
+    } else {
+        ptpng_filter_paeth_scalar(dst, src, prev, count, bpp);
+        return;
+    }
+    for (; i < count; i++) {
+        int left = i >= bpp ? dst[i - bpp] : 0;
+        int up = prev[i], upper_left = i >= bpp ? prev[i - bpp] : 0;
+        int lo = left < up ? left : up, hi = left < up ? up : left;
+        int threshold = 3 * upper_left - left - up;
+        int predictor = threshold >= hi ? lo : threshold <= lo ? hi : upper_left;
+        dst[i] = (uint8_t)(src[i] + predictor);
+    }
+}
+
 /* Modulo reduction every 2048 bytes keeps the weighted sum below 2^31,
  * even for all-255 input. Accumulate four independent sums per vector. */
 static uint32_t ptpng_adler32_neon(const uint8_t *p, size_t n)
@@ -232,6 +291,7 @@ void ptpng_neon_init(void)
     ptpng_cpu.filter_sub = ptpng_filter_sub_neon;
     ptpng_cpu.adler32 = ptpng_adler32_neon;
     ptpng_cpu.filter_up = ptpng_filter_up_neon;
+    ptpng_cpu.filter_paeth = ptpng_filter_paeth_neon;
     ptpng_cpu.cvt_table_rgba8 = ptpng_cvt_table_rgba8_neon;
     ptpng_cpu.cvt_table_rgb8 = ptpng_cvt_table_rgb8_neon;
     ptpng_cvt_table_rgba8_neon[(0 << 4) | 3] = rgba8_g8_neon;

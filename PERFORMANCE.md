@@ -384,3 +384,35 @@ Bit-scan match-length detection, a four-byte bit-writer store and moving
 writer state into a local struct did not show convincing overall gains
 in the screening tests and were not included. No new VTune collection
 was needed for these changes.
+
+## Literal batching and ARM profiling, September 25
+
+An x64 encoder change packs three already-selected literal codes into one
+bit-writer call. Only runs of at least eight literals use the separate helper;
+match probes, compression choices and PNG bytes remain unchanged. An earlier
+version slowed RGBA photos by 5% on the E-core and was discarded.
+
+Against `f6172e4`, 21 alternating pairs on the i7-1355U measured 1.41x P-core
+and 1.32x E-core encoding speed on a 1024x768 random RGBA image. Thread-cycle
+ratios were 1.43x and 1.29x. RGB/RGBA photo ratios were 1.00–1.02x. Gray and
+palette cases were close to parity. The small flat RGBA16 image was noisy:
+an E-core repeat measured 0.94x elapsed throughput and 0.97x by thread cycles;
+that case does not call the new helper. Background load and code layout remain
+possible factors, so these measurements do not establish a universal win.
+All seven local tests and 2,096 byte-identical streams checked with zlib passed.
+Nightly benchmarks now include the random RGBA image to track literal-heavy
+workloads alongside the eight existing fixtures.
+
+The first [Linux profiling run](https://github.com/bojosos/libpng_turbo/actions/runs/36060188672)
+used a Neoverse-N2 ARM64 runner and exposed user hardware counters. Scalar Paeth
+accounted for 44% of RGBA16-photo decode samples and 22% of RGBA8-photo samples;
+inflate took 47% and 63%. Photo encoding spent 75–78% in fixed-Huffman DEFLATE.
+These are sampled self costs, including brief process setup, not exact stage
+timings. The x64 VM supported software samples only: perf silently changed
+the requested cycles event to task-clock. The collection script now reads the
+recorded event to label that fallback correctly.
+
+The profiling workflow accepts an optional baseline revision. It builds both
+versions with identical flags on the same VM, pins each to one CPU, and runs
+nine alternating timing pairs. Artifacts retain every result, the CPU/compiler
+details, sampled stacks and annotated instructions.

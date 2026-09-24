@@ -80,7 +80,8 @@ jobs:
             tests/bench/graphic_pal8.png \
             tests/bench/graphic_rgb8.png \
             tests/bench/photo_rgba16_paeth.png \
-            tests/bench/graphic_rgba16_paeth.png
+            tests/bench/graphic_rgba16_paeth.png \
+            tests/bench/noise_rgba8.png
           ./build/bench_zlibng ${{ matrix.name }} bench_${{ matrix.name }}_zng.json \
             tests/bench/photo_rgb8.png \
             tests/bench/photo_rgba8.png \
@@ -89,7 +90,8 @@ jobs:
             tests/bench/graphic_pal8.png \
             tests/bench/graphic_rgb8.png \
             tests/bench/photo_rgba16_paeth.png \
-            tests/bench/graphic_rgba16_paeth.png
+            tests/bench/graphic_rgba16_paeth.png \
+            tests/bench/noise_rgba8.png
         shell: bash
 
       - name: Encoder speed and output size
@@ -98,12 +100,14 @@ jobs:
             tests/bench/photo_rgb8.png tests/bench/photo_rgba8.png \
             tests/bench/photo_gray8.png tests/bench/photo_gray16.png \
             tests/bench/graphic_pal8.png tests/bench/graphic_rgb8.png \
-            tests/bench/photo_rgba16_paeth.png tests/bench/graphic_rgba16_paeth.png
+            tests/bench/photo_rgba16_paeth.png tests/bench/graphic_rgba16_paeth.png \
+            tests/bench/noise_rgba8.png
           ./build/bench_encode_zlibng ${{ matrix.name }} encode_${{ matrix.name }}_zng.json \
             tests/bench/photo_rgb8.png tests/bench/photo_rgba8.png \
             tests/bench/photo_gray8.png tests/bench/photo_gray16.png \
             tests/bench/graphic_pal8.png tests/bench/graphic_rgb8.png \
-            tests/bench/photo_rgba16_paeth.png tests/bench/graphic_rgba16_paeth.png
+            tests/bench/photo_rgba16_paeth.png tests/bench/graphic_rgba16_paeth.png \
+            tests/bench/noise_rgba8.png
         shell: bash
 
       - name: Filter throughput (scalar and dispatched)
