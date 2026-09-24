@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790279035104,
+  "lastUpdate": 1790281229883,
   "repoUrl": "https://github.com/bojosos/libpng_turbo",
   "entries": {
     "ptpng vs libpng (nightly)": [
@@ -2679,6 +2679,1346 @@ window.BENCHMARK_DATA = {
           {
             "name": "macos-arm64/libpng-zng/graphic_rgb8 rgba8",
             "value": 426.6,
+            "unit": "MPix/s"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "Bozhidar Ivanchev Ivanov",
+            "email": "bozhidar.ivanov@ad.chaos.com"
+          },
+          "committer": {
+            "name": "Bozhidar Ivanchev Ivanov",
+            "email": "bozhidar.ivanov@ad.chaos.com"
+          },
+          "id": "28971d9ceec23f64985637ec03220e715cfc9b87",
+          "message": "Accelerate RGBA Paeth with SIMD and short inflate matches",
+          "timestamp": "2026-09-24T20:15:44Z",
+          "url": "https://github.com/bojosos/libpng_turbo/commit/28971d9ceec23f64985637ec03220e715cfc9b87"
+        },
+        "date": 1790281227276,
+        "tool": "customBiggerIsBetter",
+        "benches": [
+          {
+            "name": "linux-arm64/ptpng-vs-libpng-zng/photo_rgb8 native",
+            "value": 232.07,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "linux-arm64/libpng-zng/photo_rgb8 native",
+            "value": 196.95,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-arm64/ptpng-vs-libpng-zng/photo_rgb8 rgba8",
+            "value": 199.06,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "linux-arm64/libpng-zng/photo_rgb8 rgba8",
+            "value": 172.92,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-arm64/ptpng-vs-libpng-zng/photo_rgba8 native",
+            "value": 80.59,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "linux-arm64/libpng-zng/photo_rgba8 native",
+            "value": 82.71,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-arm64/ptpng-vs-libpng-zng/photo_rgba8 rgba8",
+            "value": 76.12,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "linux-arm64/libpng-zng/photo_rgba8 rgba8",
+            "value": 82.69,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-arm64/ptpng-vs-libpng-zng/photo_gray8 native",
+            "value": 351.08,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "linux-arm64/libpng-zng/photo_gray8 native",
+            "value": 279.94,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-arm64/ptpng-vs-libpng-zng/photo_gray8 rgba8",
+            "value": 332.36,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "linux-arm64/libpng-zng/photo_gray8 rgba8",
+            "value": 204.27,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-arm64/ptpng-vs-libpng-zng/photo_gray16 native",
+            "value": 368.91,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "linux-arm64/libpng-zng/photo_gray16 native",
+            "value": 238.18,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-arm64/ptpng-vs-libpng-zng/photo_gray16 rgba8",
+            "value": 295.33,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "linux-arm64/libpng-zng/photo_gray16 rgba8",
+            "value": 140.53,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-arm64/ptpng-vs-libpng-zng/graphic_pal8 native",
+            "value": 5504.93,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "linux-arm64/libpng-zng/graphic_pal8 native",
+            "value": 1319.58,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-arm64/ptpng-vs-libpng-zng/graphic_pal8 rgba8",
+            "value": 795.29,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "linux-arm64/libpng-zng/graphic_pal8 rgba8",
+            "value": 598.34,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-arm64/ptpng-vs-libpng-zng/graphic_rgb8 native",
+            "value": 908.29,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "linux-arm64/libpng-zng/graphic_rgb8 native",
+            "value": 892.2,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-arm64/ptpng-vs-libpng-zng/graphic_rgb8 rgba8",
+            "value": 556.46,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "linux-arm64/libpng-zng/graphic_rgb8 rgba8",
+            "value": 539.59,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-x64/ptpng-vs-libpng/photo_rgb8 native",
+            "value": 189.4,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "linux-x64/libpng/photo_rgb8 native",
+            "value": 107.35,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-x64/ptpng-vs-libpng/photo_rgb8 rgba8",
+            "value": 180.38,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "linux-x64/libpng/photo_rgb8 rgba8",
+            "value": 98.02,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-x64/ptpng-vs-libpng/photo_rgba8 native",
+            "value": 74.96,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "linux-x64/libpng/photo_rgba8 native",
+            "value": 53.74,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-x64/ptpng-vs-libpng/photo_rgba8 rgba8",
+            "value": 72.52,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "linux-x64/libpng/photo_rgba8 rgba8",
+            "value": 53.7,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-x64/ptpng-vs-libpng/photo_gray8 native",
+            "value": 290.22,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "linux-x64/libpng/photo_gray8 native",
+            "value": 210.95,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-x64/ptpng-vs-libpng/photo_gray8 rgba8",
+            "value": 275.42,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "linux-x64/libpng/photo_gray8 rgba8",
+            "value": 156.64,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-x64/ptpng-vs-libpng/photo_gray16 native",
+            "value": 303.09,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "linux-x64/libpng/photo_gray16 native",
+            "value": 151.77,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-x64/ptpng-vs-libpng/photo_gray16 rgba8",
+            "value": 286.45,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "linux-x64/libpng/photo_gray16 rgba8",
+            "value": 100.9,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-x64/ptpng-vs-libpng/graphic_pal8 native",
+            "value": 6929.83,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "linux-x64/libpng/graphic_pal8 native",
+            "value": 384.78,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-x64/ptpng-vs-libpng/graphic_pal8 rgba8",
+            "value": 1660.6,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "linux-x64/libpng/graphic_pal8 rgba8",
+            "value": 250.48,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-x64/ptpng-vs-libpng/graphic_rgb8 native",
+            "value": 915.63,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "linux-x64/libpng/graphic_rgb8 native",
+            "value": 131.28,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-x64/ptpng-vs-libpng/graphic_rgb8 rgba8",
+            "value": 776.16,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "linux-x64/libpng/graphic_rgb8 rgba8",
+            "value": 117.53,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-arm64/ptpng-vs-libpng/photo_rgb8 native",
+            "value": 252.89,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "windows-arm64/libpng/photo_rgb8 native",
+            "value": 147.33,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-arm64/ptpng-vs-libpng/photo_rgb8 rgba8",
+            "value": 189.32,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "windows-arm64/libpng/photo_rgb8 rgba8",
+            "value": 130.86,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-arm64/ptpng-vs-libpng/photo_rgba8 native",
+            "value": 91.44,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "windows-arm64/libpng/photo_rgba8 native",
+            "value": 65.97,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-arm64/ptpng-vs-libpng/photo_rgba8 rgba8",
+            "value": 86.35,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "windows-arm64/libpng/photo_rgba8 rgba8",
+            "value": 65.99,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-arm64/ptpng-vs-libpng/photo_gray8 native",
+            "value": 444.1,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "windows-arm64/libpng/photo_gray8 native",
+            "value": 256.67,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-arm64/ptpng-vs-libpng/photo_gray8 rgba8",
+            "value": 351.81,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "windows-arm64/libpng/photo_gray8 rgba8",
+            "value": 179.03,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-arm64/ptpng-vs-libpng/photo_gray16 native",
+            "value": 370.05,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "windows-arm64/libpng/photo_gray16 native",
+            "value": 201.06,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-arm64/ptpng-vs-libpng/photo_gray16 rgba8",
+            "value": 253.21,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "windows-arm64/libpng/photo_gray16 rgba8",
+            "value": 123.55,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-arm64/ptpng-vs-libpng/graphic_pal8 native",
+            "value": 3789.22,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "windows-arm64/libpng/graphic_pal8 native",
+            "value": 441.98,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-arm64/ptpng-vs-libpng/graphic_pal8 rgba8",
+            "value": 557.88,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "windows-arm64/libpng/graphic_pal8 rgba8",
+            "value": 296.45,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-arm64/ptpng-vs-libpng/graphic_rgb8 native",
+            "value": 794.97,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "windows-arm64/libpng/graphic_rgb8 native",
+            "value": 154.58,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-arm64/ptpng-vs-libpng/graphic_rgb8 rgba8",
+            "value": 389.12,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "windows-arm64/libpng/graphic_rgb8 rgba8",
+            "value": 136.78,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-x64/ptpng-vs-libpng-zng/photo_rgb8 native",
+            "value": 217.67,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "windows-x64/libpng-zng/photo_rgb8 native",
+            "value": 167.22,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-x64/ptpng-vs-libpng-zng/photo_rgb8 rgba8",
+            "value": 185.49,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "windows-x64/libpng-zng/photo_rgb8 rgba8",
+            "value": 144.39,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-x64/ptpng-vs-libpng-zng/photo_rgba8 native",
+            "value": 84.59,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "windows-x64/libpng-zng/photo_rgba8 native",
+            "value": 69.4,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-x64/ptpng-vs-libpng-zng/photo_rgba8 rgba8",
+            "value": 79.39,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "windows-x64/libpng-zng/photo_rgba8 rgba8",
+            "value": 69.58,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-x64/ptpng-vs-libpng-zng/photo_gray8 native",
+            "value": 363.61,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "windows-x64/libpng-zng/photo_gray8 native",
+            "value": 224.7,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-x64/ptpng-vs-libpng-zng/photo_gray8 rgba8",
+            "value": 290.92,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "windows-x64/libpng-zng/photo_gray8 rgba8",
+            "value": 153.45,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-x64/ptpng-vs-libpng-zng/photo_gray16 native",
+            "value": 317.36,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "windows-x64/libpng-zng/photo_gray16 native",
+            "value": 201.87,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-x64/ptpng-vs-libpng-zng/photo_gray16 rgba8",
+            "value": 258.97,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "windows-x64/libpng-zng/photo_gray16 rgba8",
+            "value": 106.29,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-x64/ptpng-vs-libpng-zng/graphic_pal8 native",
+            "value": 4016.53,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "windows-x64/libpng-zng/graphic_pal8 native",
+            "value": 1050.18,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-x64/ptpng-vs-libpng-zng/graphic_pal8 rgba8",
+            "value": 802.84,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "windows-x64/libpng-zng/graphic_pal8 rgba8",
+            "value": 354.9,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-x64/ptpng-vs-libpng-zng/graphic_rgb8 native",
+            "value": 692.32,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "windows-x64/libpng-zng/graphic_rgb8 native",
+            "value": 575.15,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-x64/ptpng-vs-libpng-zng/graphic_rgb8 rgba8",
+            "value": 458.89,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "windows-x64/libpng-zng/graphic_rgb8 rgba8",
+            "value": 371.79,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-arm64/ptpng-vs-libpng/photo_rgb8 native",
+            "value": 232.18,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "linux-arm64/libpng/photo_rgb8 native",
+            "value": 136.22,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-arm64/ptpng-vs-libpng/photo_rgb8 rgba8",
+            "value": 198.32,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "linux-arm64/libpng/photo_rgb8 rgba8",
+            "value": 123.92,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-arm64/ptpng-vs-libpng/photo_rgba8 native",
+            "value": 80.71,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "linux-arm64/libpng/photo_rgba8 native",
+            "value": 61.95,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-arm64/ptpng-vs-libpng/photo_rgba8 rgba8",
+            "value": 76.11,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "linux-arm64/libpng/photo_rgba8 rgba8",
+            "value": 61.95,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-arm64/ptpng-vs-libpng/photo_gray8 native",
+            "value": 352.37,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "linux-arm64/libpng/photo_gray8 native",
+            "value": 244.73,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-arm64/ptpng-vs-libpng/photo_gray8 rgba8",
+            "value": 331.62,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "linux-arm64/libpng/photo_gray8 rgba8",
+            "value": 185.08,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-arm64/ptpng-vs-libpng/photo_gray16 native",
+            "value": 368.47,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "linux-arm64/libpng/photo_gray16 native",
+            "value": 189.76,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-arm64/ptpng-vs-libpng/photo_gray16 rgba8",
+            "value": 294.05,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "linux-arm64/libpng/photo_gray16 rgba8",
+            "value": 121.88,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-arm64/ptpng-vs-libpng/graphic_pal8 native",
+            "value": 5491.23,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "linux-arm64/libpng/graphic_pal8 native",
+            "value": 464.28,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-arm64/ptpng-vs-libpng/graphic_pal8 rgba8",
+            "value": 791.03,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "linux-arm64/libpng/graphic_pal8 rgba8",
+            "value": 326.42,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-arm64/ptpng-vs-libpng/graphic_rgb8 native",
+            "value": 916.72,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "linux-arm64/libpng/graphic_rgb8 native",
+            "value": 160.51,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-arm64/ptpng-vs-libpng/graphic_rgb8 rgba8",
+            "value": 550.21,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "linux-arm64/libpng/graphic_rgb8 rgba8",
+            "value": 143.64,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-arm64/ptpng-vs-libpng-zng/photo_rgb8 native",
+            "value": 252.78,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "windows-arm64/libpng-zng/photo_rgb8 native",
+            "value": 211.03,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-arm64/ptpng-vs-libpng-zng/photo_rgb8 rgba8",
+            "value": 190.24,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "windows-arm64/libpng-zng/photo_rgb8 rgba8",
+            "value": 179.19,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-arm64/ptpng-vs-libpng-zng/photo_rgba8 native",
+            "value": 91.44,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "windows-arm64/libpng-zng/photo_rgba8 native",
+            "value": 81.96,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-arm64/ptpng-vs-libpng-zng/photo_rgba8 rgba8",
+            "value": 85.99,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "windows-arm64/libpng-zng/photo_rgba8 rgba8",
+            "value": 82.1,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-arm64/ptpng-vs-libpng-zng/photo_gray8 native",
+            "value": 443.99,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "windows-arm64/libpng-zng/photo_gray8 native",
+            "value": 275.73,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-arm64/ptpng-vs-libpng-zng/photo_gray8 rgba8",
+            "value": 350.66,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "windows-arm64/libpng-zng/photo_gray8 rgba8",
+            "value": 188.17,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-arm64/ptpng-vs-libpng-zng/photo_gray16 native",
+            "value": 368.2,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "windows-arm64/libpng-zng/photo_gray16 native",
+            "value": 241.37,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-arm64/ptpng-vs-libpng-zng/photo_gray16 rgba8",
+            "value": 252.54,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "windows-arm64/libpng-zng/photo_gray16 rgba8",
+            "value": 137.7,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-arm64/ptpng-vs-libpng-zng/graphic_pal8 native",
+            "value": 3845.58,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "windows-arm64/libpng-zng/graphic_pal8 native",
+            "value": 1177.32,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-arm64/ptpng-vs-libpng-zng/graphic_pal8 rgba8",
+            "value": 554.54,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "windows-arm64/libpng-zng/graphic_pal8 rgba8",
+            "value": 509.86,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-arm64/ptpng-vs-libpng-zng/graphic_rgb8 native",
+            "value": 790.13,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "windows-arm64/libpng-zng/graphic_rgb8 native",
+            "value": 716.1,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-arm64/ptpng-vs-libpng-zng/graphic_rgb8 rgba8",
+            "value": 391.81,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "windows-arm64/libpng-zng/graphic_rgb8 rgba8",
+            "value": 447.94,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-x64/ptpng-vs-libpng-zng/photo_rgb8 native",
+            "value": 188.48,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "linux-x64/libpng-zng/photo_rgb8 native",
+            "value": 169.22,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-x64/ptpng-vs-libpng-zng/photo_rgb8 rgba8",
+            "value": 180.27,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "linux-x64/libpng-zng/photo_rgb8 rgba8",
+            "value": 147.25,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-x64/ptpng-vs-libpng-zng/photo_rgba8 native",
+            "value": 74.32,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "linux-x64/libpng-zng/photo_rgba8 native",
+            "value": 75.39,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-x64/ptpng-vs-libpng-zng/photo_rgba8 rgba8",
+            "value": 71.44,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "linux-x64/libpng-zng/photo_rgba8 rgba8",
+            "value": 75.4,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-x64/ptpng-vs-libpng-zng/photo_gray8 native",
+            "value": 281.91,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "linux-x64/libpng-zng/photo_gray8 native",
+            "value": 255.25,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-x64/ptpng-vs-libpng-zng/photo_gray8 rgba8",
+            "value": 268.65,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "linux-x64/libpng-zng/photo_gray8 rgba8",
+            "value": 179.05,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-x64/ptpng-vs-libpng-zng/photo_gray16 native",
+            "value": 305.3,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "linux-x64/libpng-zng/photo_gray16 native",
+            "value": 206.09,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-x64/ptpng-vs-libpng-zng/photo_gray16 rgba8",
+            "value": 286.06,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "linux-x64/libpng-zng/photo_gray16 rgba8",
+            "value": 110.24,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-x64/ptpng-vs-libpng-zng/graphic_pal8 native",
+            "value": 6987.38,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "linux-x64/libpng-zng/graphic_pal8 native",
+            "value": 1288.24,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-x64/ptpng-vs-libpng-zng/graphic_pal8 rgba8",
+            "value": 1664.73,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "linux-x64/libpng-zng/graphic_pal8 rgba8",
+            "value": 440.35,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-x64/ptpng-vs-libpng-zng/graphic_rgb8 native",
+            "value": 956.06,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "linux-x64/libpng-zng/graphic_rgb8 native",
+            "value": 895.53,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "linux-x64/ptpng-vs-libpng-zng/graphic_rgb8 rgba8",
+            "value": 751.51,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "linux-x64/libpng-zng/graphic_rgb8 rgba8",
+            "value": 506.11,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-x64/ptpng-vs-libpng/photo_rgb8 native",
+            "value": 218.06,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "windows-x64/libpng/photo_rgb8 native",
+            "value": 109.98,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-x64/ptpng-vs-libpng/photo_rgb8 rgba8",
+            "value": 186.55,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "windows-x64/libpng/photo_rgb8 rgba8",
+            "value": 99.15,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-x64/ptpng-vs-libpng/photo_rgba8 native",
+            "value": 84.71,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "windows-x64/libpng/photo_rgba8 native",
+            "value": 52.21,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-x64/ptpng-vs-libpng/photo_rgba8 rgba8",
+            "value": 79.21,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "windows-x64/libpng/photo_rgba8 rgba8",
+            "value": 52.21,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-x64/ptpng-vs-libpng/photo_gray8 native",
+            "value": 364.17,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "windows-x64/libpng/photo_gray8 native",
+            "value": 201.46,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-x64/ptpng-vs-libpng/photo_gray8 rgba8",
+            "value": 292.22,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "windows-x64/libpng/photo_gray8 rgba8",
+            "value": 141.83,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-x64/ptpng-vs-libpng/photo_gray16 native",
+            "value": 315.95,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "windows-x64/libpng/photo_gray16 native",
+            "value": 160.37,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-x64/ptpng-vs-libpng/photo_gray16 rgba8",
+            "value": 260.34,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "windows-x64/libpng/photo_gray16 rgba8",
+            "value": 93.2,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-x64/ptpng-vs-libpng/graphic_pal8 native",
+            "value": 4101.03,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "windows-x64/libpng/graphic_pal8 native",
+            "value": 341.35,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-x64/ptpng-vs-libpng/graphic_pal8 rgba8",
+            "value": 805.52,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "windows-x64/libpng/graphic_pal8 rgba8",
+            "value": 211.28,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-x64/ptpng-vs-libpng/graphic_rgb8 native",
+            "value": 705.36,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "windows-x64/libpng/graphic_rgb8 native",
+            "value": 113.08,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "windows-x64/ptpng-vs-libpng/graphic_rgb8 rgba8",
+            "value": 463.16,
+            "unit": "MPix/s",
+            "extra": "avx2 sse4.1 ssse3 sse2 pclmul bmi2 "
+          },
+          {
+            "name": "windows-x64/libpng/graphic_rgb8 rgba8",
+            "value": 101.79,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "macos-arm64/ptpng-vs-libpng/photo_rgb8 native",
+            "value": 259.39,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "macos-arm64/libpng/photo_rgb8 native",
+            "value": 129.72,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "macos-arm64/ptpng-vs-libpng/photo_rgb8 rgba8",
+            "value": 208.83,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "macos-arm64/libpng/photo_rgb8 rgba8",
+            "value": 114.47,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "macos-arm64/ptpng-vs-libpng/photo_rgba8 native",
+            "value": 83.65,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "macos-arm64/libpng/photo_rgba8 native",
+            "value": 55.22,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "macos-arm64/ptpng-vs-libpng/photo_rgba8 rgba8",
+            "value": 80.73,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "macos-arm64/libpng/photo_rgba8 rgba8",
+            "value": 54.82,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "macos-arm64/ptpng-vs-libpng/photo_gray8 native",
+            "value": 364.85,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "macos-arm64/libpng/photo_gray8 native",
+            "value": 209.62,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "macos-arm64/ptpng-vs-libpng/photo_gray8 rgba8",
+            "value": 315.88,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "macos-arm64/libpng/photo_gray8 rgba8",
+            "value": 147.97,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "macos-arm64/ptpng-vs-libpng/photo_gray16 native",
+            "value": 329.37,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "macos-arm64/libpng/photo_gray16 native",
+            "value": 152.82,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "macos-arm64/ptpng-vs-libpng/photo_gray16 rgba8",
+            "value": 240.15,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "macos-arm64/libpng/photo_gray16 rgba8",
+            "value": 104.88,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "macos-arm64/ptpng-vs-libpng/graphic_pal8 native",
+            "value": 5292.9,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "macos-arm64/libpng/graphic_pal8 native",
+            "value": 485.15,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "macos-arm64/ptpng-vs-libpng/graphic_pal8 rgba8",
+            "value": 693.96,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "macos-arm64/libpng/graphic_pal8 rgba8",
+            "value": 316.78,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "macos-arm64/ptpng-vs-libpng/graphic_rgb8 native",
+            "value": 883.77,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "macos-arm64/libpng/graphic_rgb8 native",
+            "value": 144.11,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "macos-arm64/ptpng-vs-libpng/graphic_rgb8 rgba8",
+            "value": 442.01,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "macos-arm64/libpng/graphic_rgb8 rgba8",
+            "value": 131.94,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "macos-arm64/ptpng-vs-libpng-zng/photo_rgb8 native",
+            "value": 257.82,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "macos-arm64/libpng-zng/photo_rgb8 native",
+            "value": 193.31,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "macos-arm64/ptpng-vs-libpng-zng/photo_rgb8 rgba8",
+            "value": 192.3,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "macos-arm64/libpng-zng/photo_rgb8 rgba8",
+            "value": 159.11,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "macos-arm64/ptpng-vs-libpng-zng/photo_rgba8 native",
+            "value": 85.45,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "macos-arm64/libpng-zng/photo_rgba8 native",
+            "value": 67.15,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "macos-arm64/ptpng-vs-libpng-zng/photo_rgba8 rgba8",
+            "value": 78.39,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "macos-arm64/libpng-zng/photo_rgba8 rgba8",
+            "value": 71.51,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "macos-arm64/ptpng-vs-libpng-zng/photo_gray8 native",
+            "value": 373.52,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "macos-arm64/libpng-zng/photo_gray8 native",
+            "value": 224.02,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "macos-arm64/ptpng-vs-libpng-zng/photo_gray8 rgba8",
+            "value": 309.69,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "macos-arm64/libpng-zng/photo_gray8 rgba8",
+            "value": 170.23,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "macos-arm64/ptpng-vs-libpng-zng/photo_gray16 native",
+            "value": 324.56,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "macos-arm64/libpng-zng/photo_gray16 native",
+            "value": 202.44,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "macos-arm64/ptpng-vs-libpng-zng/photo_gray16 rgba8",
+            "value": 229.91,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "macos-arm64/libpng-zng/photo_gray16 rgba8",
+            "value": 119.16,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "macos-arm64/ptpng-vs-libpng-zng/graphic_pal8 native",
+            "value": 4731.98,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "macos-arm64/libpng-zng/graphic_pal8 native",
+            "value": 1730.9,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "macos-arm64/ptpng-vs-libpng-zng/graphic_pal8 rgba8",
+            "value": 733.38,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "macos-arm64/libpng-zng/graphic_pal8 rgba8",
+            "value": 590.13,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "macos-arm64/ptpng-vs-libpng-zng/graphic_rgb8 native",
+            "value": 857.53,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "macos-arm64/libpng-zng/graphic_rgb8 native",
+            "value": 649.69,
+            "unit": "MPix/s"
+          },
+          {
+            "name": "macos-arm64/ptpng-vs-libpng-zng/graphic_rgb8 rgba8",
+            "value": 441.66,
+            "unit": "MPix/s",
+            "extra": "neon "
+          },
+          {
+            "name": "macos-arm64/libpng-zng/graphic_rgb8 rgba8",
+            "value": 431.75,
             "unit": "MPix/s"
           }
         ]
