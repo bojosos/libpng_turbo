@@ -1,0 +1,111 @@
+name: Coverage fuzzing
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: Seconds per target (10-600)
+        default: '120'
+        required: true
+  schedule:
+    - cron: '17 4 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  fuzz:
+    name: fuzz-${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            os: ubuntu-24.04
+          - arch: arm64
+            os: ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    env:
+      CC: clang
+      CXX: clang++
+      FUZZ_SECONDS: ${{ github.event_name == 'schedule' && '300' || inputs.seconds || '30' }}
+      ASAN_OPTIONS: detect_leaks=1:allocator_may_return_null=1
+      UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate budget
+        run: python3 -c "import os; n=int(os.environ['FUZZ_SECONDS']); assert 10 <= n <= 600, n"
+
+      - name: Configure instrumented library and fuzz targets
+        run: >
+          cmake -S . -B build-fuzz -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DPTPNG_BUILD_FUZZERS=ON -DPTPNG_WITH_LIBPNG=ON
+          -DPTPNG_BUILD_BENCH=OFF -DPTPNG_WITH_ZLIB_NG=OFF
+
+      - name: Build
+        run: cmake --build build-fuzz --target fuzz_decode fuzz_inflate fuzz_encode --parallel 2
+
+      - uses: actions/cache@v4
+        with:
+          path: fuzz-corpus
+          key: fuzz-v1-${{ matrix.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: fuzz-v1-${{ matrix.arch }}-
+
+      - name: Seed the corpus
+        run: python3 tools/prepare_fuzz_corpus.py --output fuzz-corpus
+
+      - name: Run coverage-guided campaigns
+        shell: bash
+        run: |
+          set -uo pipefail
+          set +e
+          mkdir -p fuzz-results
+          failed=0
+          for target in decode inflate encode; do
+            mkdir -p "fuzz-results/$target"
+            dictionary=()
+            if [ "$target" = decode ]; then dictionary=(-dict=tools/png.dict); fi
+            ./build-fuzz/fuzz_$target "fuzz-corpus/$target" "${dictionary[@]}" \
+              -max_total_time="$FUZZ_SECONDS" -timeout=10 -rss_limit_mb=3072 \
+              -max_len=1048576 -print_final_stats=1 \
+              -artifact_prefix="fuzz-results/$target/" \
+              2>&1 | tee "fuzz-results/$target.log"
+            if [ "${PIPESTATUS[0]}" -ne 0 ]; then failed=1; fi
+          done
+          exit "$failed"
+
+      - name: Campaign summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '### Coverage-guided fuzzing (${{ matrix.arch }})'
+            echo "Budget: $FUZZ_SECONDS seconds per target. Revision: $GITHUB_SHA."
+            echo 'ASan + UBSan; encoder/libpng and inflate/zlib differential checks enabled.'
+            echo 'Crash inputs, logs, and the accumulated corpus are attached as artifacts.'
+            echo 'These bounded campaigns do not prove that all bugs or branches are covered.'
+            for target in decode inflate encode; do
+              echo "#### $target"
+              echo '```text'
+              if [ -f "fuzz-results/$target.log" ]; then tail -n 12 "fuzz-results/$target.log"; fi
+              echo '```'
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fuzz-${{ matrix.arch }}-${{ github.run_id }}
+          path: |
+            fuzz-results/
+            fuzz-corpus/
+          retention-days: 14
+          if-no-files-found: warn

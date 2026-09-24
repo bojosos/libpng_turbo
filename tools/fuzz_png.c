@@ -1,10 +1,11 @@
 /*
  * fuzz_png.c - structured mutation fuzzer for ptpng_decode.
  * Deterministic (seeded LCG) so crashes reproduce: the seed and
- * iteration are printed before each batch and on abort via atexit.
+ * batch are printed before decoding so sanitizer crashes can
+ * be replayed. atexit does not run on signals or sanitizer aborts.
  * Modes: byte flips, truncation, chunk-length/type corruption, header
  * field mutation, and CRC/adler invalidation (must still be rejected
- * or decode identically, never crash).
+ * or return a valid decoded result, never crash).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,7 +20,7 @@ static unsigned rnd(void)
 }
 
 static unsigned long long g_seed;
-static int g_iter;
+static unsigned long long g_iter;
 static int g_clean;
 static char g_name[256];
 
@@ -27,7 +28,7 @@ static void report(void)
 {
     if (g_clean)
         return; /* normal exit: nothing to report */
-    fprintf(stderr, "FUZZ CRASH: seed=%llu iter=%d file=%s\n", g_seed,
+    fprintf(stderr, "FUZZ INCOMPLETE: seed=%llu iter=%llu file=%s\n", g_seed,
             g_iter, g_name);
     fflush(stderr);
 }
@@ -57,9 +58,10 @@ static int mutate_and_decode(const uint8_t *orig, size_t len, int mode)
             size_t pos = 8;
             int which = (int)(rnd() % 12);
             while (pos + 12 <= len && which > 0) {
-                unsigned cl = (unsigned)buf[pos] << 24 | (unsigned)buf[pos+1] << 16
+                size_t cl = (unsigned)buf[pos] << 24 | (unsigned)buf[pos+1] << 16
                             | (unsigned)buf[pos+2] << 8 | buf[pos+3];
                 which--;
+                if (cl > len - pos - 12) { pos = len; break; }
                 pos += 12 + cl;
             }
             if (pos + 12 <= len) {
@@ -68,9 +70,9 @@ static int mutate_and_decode(const uint8_t *orig, size_t len, int mode)
             }
         }
         break;
-    case 3: /* IHDR field mutation (bytes 8..33) */
-        if (len > 8 + 13)
-            buf[8 + rnd() % 13] ^= (uint8_t)(1u << (rnd() % 8));
+    case 3: /* IHDR payload, after signature, length and type. */
+        if (len >= 33)
+            buf[16 + rnd() % 13] ^= (uint8_t)(1u << (rnd() % 8));
         break;
     default: /* splice: duplicate a middle section */
         if (len > 64) {
@@ -94,8 +96,11 @@ static int mutate_and_decode(const uint8_t *orig, size_t len, int mode)
         if (rnd() & 1)
             opts.flags = PTPNG_FLAG_NO_VERIFY_CRC | PTPNG_FLAG_NO_VERIFY_ADLER;
         rc = ptpng_decode(buf, n, &opts, &out, &olen, NULL);
-        if (rc == PTPNG_OK)
-            ptpng_free(out);
+        if (rc != PTPNG_OK && (out != NULL || olen != 0)) {
+            fprintf(stderr, "decode error left output: seed=%llu iter=%llu\n", g_seed, g_iter);
+            abort();
+        }
+        ptpng_free(out);
     }
     return 1;
 }
@@ -107,7 +112,6 @@ int main(int argc, char **argv)
     long fsz;
     static uint8_t orig[1 << 20];
     unsigned long long iters, i;
-    int rc_total = 0;
 
     if (argc < 4) return 2;
     g_seed = strtoull(argv[3], NULL, 0);
@@ -117,19 +121,22 @@ int main(int argc, char **argv)
 
     f = fopen(argv[1], "rb");
     if (!f) return 2;
-    fseek(f, 0, SEEK_END); fsz = ftell(f); fseek(f, 0, SEEK_SET);
-    if (fsz > (long)sizeof(orig)) fsz = (long)sizeof(orig);
-    if (fread(orig, 1, (size_t)fsz, f) != (size_t)fsz) return 2;
+    if (fseek(f, 0, SEEK_END) || (fsz = ftell(f)) <= 0 ||
+        fsz > (long)sizeof(orig) || fseek(f, 0, SEEK_SET)) { fclose(f); return 2; }
+    if (fread(orig, 1, (size_t)fsz, f) != (size_t)fsz) { fclose(f); return 2; }
     fclose(f);
 
     iters = strtoull(argv[2], NULL, 0);
     for (i = 0; i < iters; i++) {
-        g_iter = (int)i;
-        rc_total += mutate_and_decode(orig, (size_t)fsz, (int)(rnd() % 5));
+        g_iter = i;
+        if ((i & 1023) == 0) {
+            fprintf(stderr, "fuzz: file=%s seed=%llu batch=%llu\n", g_name, g_seed, i);
+            fflush(stderr);
+        }
+        mutate_and_decode(orig, (size_t)fsz, (int)(rnd() % 5));
     }
     printf("fuzz done: %llu mutations of %s (seed %llu)\n", iters, argv[1],
            g_seed);
-    (void)rc_total;
     g_clean = 1;
     return 0;
 }

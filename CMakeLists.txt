@@ -4,6 +4,7 @@ project(ptpng C)
 option(PTPNG_WITH_LIBPNG "Build the vendored zlib+libpng reference and the parity/benchmark tools" ON)
 option(PTPNG_BUILD_BENCH "Build bench_compare (nightly perf tracking)" ON)
 option(PTPNG_WITH_ZLIB_NG "Also build libpng+zlib-ng reference for benchmarks" ON)
+option(PTPNG_BUILD_FUZZERS "Build Clang libFuzzer targets with ASan and UBSan" OFF)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -56,7 +57,7 @@ else()
 endif()
 
 # ---- the CLI tool and unit testers -------------------------------------
-set(PTPNG_TOOLS ptpng_tool filters_test sums_test inflate_test inf_bench fuzz_png decoder_test encoder_test encoder_filters_test deflate_test)
+set(PTPNG_TOOLS ptpng_tool filters_test sums_test inflate_test inf_bench fuzz_png decoder_test encoder_test encoder_filters_test deflate_test profile_png)
 foreach(tgt ${PTPNG_TOOLS})
     add_executable(${tgt} tools/${tgt}.c)
     target_link_libraries(${tgt} PRIVATE ptpng)
@@ -79,6 +80,22 @@ add_test(NAME decoder COMMAND decoder_test)
 add_test(NAME encoder COMMAND encoder_test)
 add_test(NAME encoder_filters COMMAND encoder_filters_test)
 add_test(NAME deflate COMMAND deflate_test)
+
+if(PTPNG_BUILD_FUZZERS)
+    if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang" OR MSVC)
+        message(FATAL_ERROR "PTPNG_BUILD_FUZZERS requires Clang with the Unix libFuzzer runtime")
+    endif()
+    target_compile_options(ptpng PRIVATE -fsanitize=fuzzer-no-link,address,undefined
+                                         -fno-omit-frame-pointer)
+    target_link_options(ptpng INTERFACE -fsanitize=address,undefined)
+    foreach(tgt fuzz_decode fuzz_inflate fuzz_encode)
+        add_executable(${tgt} tools/${tgt}.c)
+        target_link_libraries(${tgt} PRIVATE ptpng)
+        target_compile_options(${tgt} PRIVATE -fsanitize=fuzzer,address,undefined
+                                              -fno-omit-frame-pointer)
+        target_link_options(${tgt} PRIVATE -fsanitize=fuzzer,address,undefined)
+    endforeach()
+endif()
 
 # ---- reference build (zlib + libpng) and parity/bench tools ------------
 if(PTPNG_WITH_LIBPNG)
@@ -161,6 +178,13 @@ if(PTPNG_WITH_LIBPNG)
     target_compile_definitions(deflate_test PRIVATE PTPNG_TEST_ZLIB)
     target_include_directories(deflate_test PRIVATE ${ZBUILD}/inst/include)
     target_link_libraries(deflate_test PRIVATE ${PTPNG_ZLIB_LIB})
+    if(PTPNG_BUILD_FUZZERS)
+        target_compile_definitions(fuzz_encode PRIVATE PTPNG_FUZZ_LIBPNG)
+        target_link_libraries(fuzz_encode PRIVATE png_static)
+        target_compile_definitions(fuzz_inflate PRIVATE PTPNG_FUZZ_ZLIB)
+        target_include_directories(fuzz_inflate PRIVATE ${ZBUILD}/inst/include)
+        target_link_libraries(fuzz_inflate PRIVATE ${PTPNG_ZLIB_LIB})
+    endif()
 
     # All targets inherit the same MSVC runtime selection.
     set(PTPNG_REF_TOOLS verify_suite)

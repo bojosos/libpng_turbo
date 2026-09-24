@@ -232,6 +232,34 @@ To rebuild libpng+zlib references: see `build.bat` comments in
 a fuzz smoke on linux-x64 (gcc + clang, plus ASan+UBSan job), macOS
 ARM64, Windows x64, Windows ARM64 and Linux ARM64.
 
+`.github/workflows/fuzz.yml` adds Clang coverage-guided fuzzing with ASan
+and UBSan on Linux x64 and ARM64. Three targets exercise PNG decoding,
+zlib-stream decompression (checked against zlib), and encoder round trips
+(checked against libpng). Corpus discoveries are cached between runs;
+logs, corpora and crash inputs are uploaded as artifacts. Pushes run each
+target for 30 seconds, nightly runs for five minutes, and manual runs
+accept 10-600 seconds per target. These are bounded campaigns, not proof
+of complete coverage. Input size, output size and encoder dimensions are
+limited; large-image and allocation-failure cases still need separate tests.
+
+To run locally with a Unix Clang toolchain:
+
+```sh
+CC=clang cmake -S . -B build-fuzz -DPTPNG_BUILD_FUZZERS=ON -DPTPNG_WITH_ZLIB_NG=OFF
+cmake --build build-fuzz --target fuzz_decode fuzz_inflate fuzz_encode
+python3 tools/prepare_fuzz_corpus.py --output build-fuzz/corpus
+build-fuzz/fuzz_decode build-fuzz/corpus/decode -dict=tools/png.dict -max_total_time=300
+build-fuzz/fuzz_inflate build-fuzz/corpus/inflate -max_total_time=300
+build-fuzz/fuzz_encode build-fuzz/corpus/encode -max_total_time=300
+```
+
+`.github/workflows/profile.yml` is a manual Linux x64/ARM64 profiling run.
+It pins the workload to one logical CPU and saves machine details, timings,
+supported hardware counters, `perf.data`, text reports and annotated assembly.
+When a hosted VM does not expose hardware sampling, it tries software CPU
+timer sampling and labels that fallback explicitly. Download the profile
+artifacts from the workflow run; `summary.md` lists the hot functions.
+
 `.github/workflows/nightly.yml` runs nightly: the full test matrix,
 then benchmarks ptpng vs **libpng+zlib** and **libpng+zlib-ng** on
 every platform, and pushes the accumulated results to the `gh-pages`

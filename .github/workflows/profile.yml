@@ -1,0 +1,57 @@
+name: Linux profiling
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-profile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  profile:
+    name: profile-${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-arm64
+            os: ubuntu-24.04-arm
+          - name: linux-x64
+            os: ubuntu-24.04
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install perf and image generator dependencies
+        shell: bash
+        run: |
+          mkdir -p profile-results
+          python -m pip install --quiet pillow
+          sudo apt-get update -qq
+          sudo apt-get install -y linux-tools-common linux-tools-generic
+          # Azure kernel packages are not always published in the image's apt repo.
+          sudo apt-get install -y "linux-tools-$(uname -r)" > profile-results/perf-install.txt 2>&1 || cat profile-results/perf-install.txt
+      - name: Generate benchmark fixtures
+        run: |
+          python tests/gen_bench.py
+          python tests/gen_bench16.py
+      - name: Build optimized code with profiling symbols
+        run: |
+          cmake -S . -B build_profile -DCMAKE_BUILD_TYPE=Release -DPTPNG_WITH_LIBPNG=OFF -DCMAKE_EXPORT_COMPILE_COMMANDS=ON '-DCMAKE_C_FLAGS_RELEASE=-O3 -g -DNDEBUG -fno-omit-frame-pointer'
+          cmake --build build_profile --parallel 2
+          ctest --test-dir build_profile --output-on-failure
+      - name: Collect process-scoped profiles and reports
+        shell: bash
+        run: bash tools/profile_linux.sh build_profile profile-results 5
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: profile-${{ matrix.name }}
+          path: profile-results/
+          retention-days: 14
