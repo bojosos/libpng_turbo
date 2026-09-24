@@ -399,6 +399,8 @@ palette cases were close to parity. The small flat RGBA16 image was noisy:
 an E-core repeat measured 0.94x elapsed throughput and 0.97x by thread cycles;
 that case does not call the new helper. Background load and code layout remain
 possible factors, so these measurements do not establish a universal win.
+A later 51-pair E-core repeat put flat RGBA16 at 0.999x elapsed throughput
+and 0.997x by thread cycles, while random RGBA remained 1.302x and 1.299x.
 All seven local tests and 2,096 byte-identical streams checked with zlib passed.
 Nightly benchmarks now include the random RGBA image to track literal-heavy
 workloads alongside the eight existing fixtures.
@@ -416,3 +418,39 @@ The profiling workflow accepts an optional baseline revision. It builds both
 versions with identical flags on the same VM, pins each to one CPU, and runs
 nine alternating timing pairs. Artifacts retain every result, the CPU/compiler
 details, sampled stacks and annotated instructions.
+
+The [paired ARM run](https://github.com/bojosos/libpng_turbo/actions/runs/36061201763)
+compared the new NEON Paeth implementation against `f6172e4` on one
+Neoverse-N2 CPU, nine alternating one-second pairs per case:
+
+| Native decode | Median speedup | Observed pair range |
+| --- | ---: | ---: |
+| RGBA8 photo | 1.004x | 1.002–1.006x |
+| RGBA16 Paeth photo | 1.553x | 1.550–1.555x |
+| RGBA16 Paeth graphics | 1.935x | 1.932–1.937x |
+
+NEON processes the independent four- or eight-byte Paeth chains in 16-bit
+lanes, using exact-width loads/stores and scalar partial-pixel tails. The
+four-byte path did not materially improve this ARM photo workload; the
+eight-byte path did. These Linux ARM results do not predict Apple Silicon
+performance. macOS ARM and Windows ARM correctness checks passed separately.
+
+The initial GCC build improved random RGBA encoding 1.278x but slowed the
+RGBA8 photo to 0.974x. Its generated code placed the rare batching call on
+the fall-through path and moved short literals behind extra jumps. Marking
+long runs unlikely under GCC/Clang restored the photo case to 0.999x
+(0.997–1.004x range), with random RGBA still 1.248x faster
+(1.101–1.483x range). Graphics encoding was 1.000x. This
+[final paired run](https://github.com/bojosos/libpng_turbo/actions/runs/36062061909)
+also repeated the ARM gains at 1.555x for RGBA16 photos and 1.944x for
+RGBA16 graphics. Windows keeps the previously measured MSVC code path.
+
+The [expanded differential fuzz campaign](https://github.com/bojosos/libpng_turbo/actions/runs/36061508310)
+completed 2,641,561 executions with ASan and UBSan across Linux x64 and ARM64,
+with no reported failures. Each of three targets ran for 120 seconds per
+architecture. Native decoder output is compared with libpng when both accept
+the input; encoder output is decoded by libpng, and decompression is checked
+against zlib. The seed corpus includes valid compressed profiles, suggested
+palettes, text-allocation boundaries, and full-sized random encoder inputs.
+Pixel/input limits and short campaign budgets remain deliberate restrictions;
+execution counts are not coverage percentages or proof of correctness.
