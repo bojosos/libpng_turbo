@@ -138,6 +138,58 @@ static int check_full(int kind, const char *name, unsigned bpp)
     return 0;
 }
 
+static int test_conversions(void)
+{
+    static const unsigned channels[] = {1, 0, 3, 1, 2, 0, 4};
+    struct ptpng_cvt cvt;
+    uint8_t palette[768], trans[256], expected[260 + 32], actual[260 + 32];
+    unsigned i, key, output, alignment, n;
+    memset(&cvt, 0, sizeof(cvt));
+    cvt.palette = palette;
+    cvt.trans = trans;
+    cvt.num_trans = 197;
+    for (i = 0; i < 768; i++) palette[i] = (uint8_t)(NEXT() >> 24);
+    for (i = 0; i < 256; i++) {
+        trans[i] = (uint8_t)(NEXT() >> 24);
+        memcpy(cvt.pal_rgba + i * 4, palette + i * 3, 3);
+        cvt.pal_rgba[i * 4 + 3] = i < cvt.num_trans ? trans[i] : 255;
+    }
+    for (output = 3; output <= 4; output++) {
+        const ptpng_cvt_fn *scalar = output == 4 ? ptpng_cvt_table_rgba8_scalar :
+                                                  ptpng_cvt_table_rgb8_scalar;
+        const ptpng_cvt_fn *selected = output == 4 ? ptpng_cpu.cvt_table_rgba8 :
+                                                    ptpng_cpu.cvt_table_rgb8;
+        for (key = 0; key < 128; key++) {
+            if (!scalar[key]) continue;
+            for (n = 0; n <= 65; n++) {
+                size_t bytes = ((size_t)n * channels[key >> 4] *
+                                ((size_t)1 << (key & 15)) + 7) / 8;
+                for (alignment = 0; alignment < 16; alignment++) {
+                    /* No readable padding after the row: ASan catches full
+                     * vector loads that extend past the final pixel. */
+                    size_t allocation = bytes + alignment;
+                    uint8_t *storage = (uint8_t *)malloc(allocation ? allocation : 1);
+                    uint8_t *pixels;
+                    if (!storage) return 1;
+                    pixels = storage + alignment;
+                    for (i = 0; i < bytes; i++) pixels[i] = (uint8_t)(NEXT() >> 24);
+                    memset(expected, 0xa5, sizeof(expected));
+                    memset(actual, 0xa5, sizeof(actual));
+                    scalar[key](pixels, expected + alignment, n, &cvt);
+                    selected[key](pixels, actual + alignment, n, &cvt);
+                    free(storage);
+                    if (memcmp(expected, actual, sizeof(expected))) {
+                        printf("conversion key=%u output=%u pixels=%u alignment=%u mismatch\n",
+                               key, output, n, alignment);
+                        return 1;
+                    }
+                }
+            }
+        }
+    }
+    return 0;
+}
+
 static void benchmark(void)
 {
     static const unsigned bpps[] = {1, 2, 3, 4, 6, 8};
@@ -173,6 +225,7 @@ int main(int argc, char **argv)
         return 0;
     }
     if (test_paeth_pred()) bad = 1;
+    if (test_conversions()) bad = 1;
     for (i = 0; i < 6; i++) {
         if (check_full(1, "sub", bpps[i])) bad = 1;
         if (check_full(2, "up", bpps[i])) bad = 1;

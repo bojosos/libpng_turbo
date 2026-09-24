@@ -23,7 +23,8 @@
 
 #define SUB_BLOCKS(BPP, ...)                                             \
     {                                                                    \
-        static const uint8x16_t ctrl = {__VA_ARGS__};                     \
+        static const uint8_t ctrl_bytes[16] = {__VA_ARGS__};              \
+        const uint8x16_t ctrl = vld1q_u8(ctrl_bytes);                     \
         const uint8x16_t zero = vdupq_n_u8(0);                            \
         uint8x16_t carry = zero;                                         \
         size_t i = 0;                                                    \
@@ -77,8 +78,10 @@ static void ptpng_filter_sub_neon(uint8_t *dst, const uint8_t *src,
  * even for all-255 input. Accumulate four independent sums per vector. */
 static uint32_t ptpng_adler32_neon(const uint8_t *p, size_t n)
 {
-    static const uint8x8_t weight_lo = {16, 15, 14, 13, 12, 11, 10, 9};
-    static const uint8x8_t weight_hi = {8, 7, 6, 5, 4, 3, 2, 1};
+    static const uint8_t weight_bytes[16] = {16, 15, 14, 13, 12, 11, 10, 9,
+                                            8, 7, 6, 5, 4, 3, 2, 1};
+    const uint8x8_t weight_lo = vld1_u8(weight_bytes);
+    const uint8x8_t weight_hi = vld1_u8(weight_bytes + 8);
     uint32_t a = 1, b = 0;
     while (n >= 16) {
         unsigned chunk = n < 2048 ? (unsigned)n : 2048;
@@ -134,12 +137,15 @@ void ptpng_filter_up_neon(uint8_t *dst, const uint8_t *src,
 static void rgba8_g8_neon(const uint8_t *src, uint8_t *dst, uint32_t n,
                           const struct ptpng_cvt *c)
 {
-    static const uint8x16_t dup_lo = {
+    static const uint8_t dup_lo_bytes[16] = {
         0, 0, 0, 16, 2, 2, 2, 16, 4, 4, 4, 16, 6, 6, 6, 16 };
-    static const uint8x16_t dup_hi = {
+    static const uint8_t dup_hi_bytes[16] = {
         8, 8, 8, 16, 10, 10, 10, 16, 12, 12, 12, 16, 14, 14, 14, 16 };
-    static const uint8x16_t alpha = { 0, 0, 0, 255, 0, 0, 0, 255,
+    static const uint8_t alpha_bytes[16] = { 0, 0, 0, 255, 0, 0, 0, 255,
                                       0, 0, 0, 255, 0, 0, 0, 255 };
+    const uint8x16_t dup_lo = vld1q_u8(dup_lo_bytes);
+    const uint8x16_t dup_hi = vld1q_u8(dup_hi_bytes);
+    const uint8x16_t alpha = vld1q_u8(alpha_bytes);
     uint32_t i = 0;
     (void)c;
     for (; i + 8 <= n; i += 8) {
@@ -163,10 +169,12 @@ static void rgba8_g8_neon(const uint8_t *src, uint8_t *dst, uint32_t n,
 static void rgba8_ga8_neon(const uint8_t *src, uint8_t *dst, uint32_t n,
                            const struct ptpng_cvt *c)
 {
-    static const uint8x16_t lo = {
+    static const uint8_t lo_bytes[16] = {
         0, 0, 0, 1, 2, 2, 2, 3, 4, 4, 4, 5, 6, 6, 6, 7 };
-    static const uint8x16_t hi = {
+    static const uint8_t hi_bytes[16] = {
         8, 8, 8, 9, 10, 10, 10, 11, 12, 12, 12, 13, 14, 14, 14, 15 };
+    const uint8x16_t lo = vld1q_u8(lo_bytes);
+    const uint8x16_t hi = vld1q_u8(hi_bytes);
     uint32_t i = 0;
     (void)c;
     for (; i + 8 <= n; i += 8) {
@@ -186,8 +194,9 @@ static void rgba8_ga8_neon(const uint8_t *src, uint8_t *dst, uint32_t n,
 static void rgba8_rgba16_neon(const uint8_t *src, uint8_t *dst, uint32_t n,
                               const struct ptpng_cvt *c)
 {
-    static const uint8x16_t pick = {
+    static const uint8_t pick_bytes[16] = {
         0, 2, 4, 6, 8, 10, 12, 14, 0, 0, 0, 0, 0, 0, 0, 0 };
+    const uint8x16_t pick = vld1q_u8(pick_bytes);
     uint32_t i = 0;
     (void)c;
     for (; i + 4 <= n; i += 4) {

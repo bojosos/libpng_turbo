@@ -212,6 +212,12 @@ int main(int argc, char **argv)
 
         tpt_n = bench_ptpng(data, size, PTPNG_OUT_NATIVE, iters, &pt_len);
         tlp_n = bench_libpng(data, size, 0, iters, &lp_len);
+        if (pt_len != lp_len) {
+            fprintf(stderr, "native output size mismatch for %s\n", nm);
+            free(data);
+            fclose(js);
+            return 1;
+        }
         tpt_r = bench_ptpng(data, size, PTPNG_OUT_RGBA8, iters, &pt_len);
         tlp_r = bench_libpng(data, size, 1, iters, &lp_len);
         if (tpt_n <= 0 || tlp_n <= 0 || tpt_r <= 0 || tlp_r <= 0 ||

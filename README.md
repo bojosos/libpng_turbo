@@ -1,9 +1,20 @@
-# ptpng — a maximum-speed single-threaded PNG decoder
+# ptpng: a fast single-threaded PNG decoder
 
-ptpng decodes every valid PNG (all color types, bit depths 1/2/4/8/16,
-Adam7 interlacing, tRNS, all standard ancillary chunks) and produces
-**byte-exact libpng `png_read_image()` output**, while decoding 1.1-2.7x
-faster than libpng 1.6 (zlib) on real content, single-threaded.
+ptpng supports all PNG color types, bit depths 1/2/4/8/16, Adam7
+interlacing and tRNS. Its tests compare decoded pixels byte-for-byte with
+libpng `png_read_image()`. AVX2 paths run on supported x86 CPUs; ARM64
+builds use NEON. The library has no external runtime dependencies.
+
+Calls must be serialized across threads: the decoder shares mutable
+Huffman tables and CPU dispatch state. Optional metadata uses a bounded
+allocation table; excess metadata is skipped while pixels still decode.
+
+The tables below are historical measurements from the original benchmark.
+The benchmark now gives libpng a contiguous output allocation and includes
+setup and end-of-file processing for both decoders. Rerun it before using
+these ratios to compare the current code. See [PERFORMANCE.md](PERFORMANCE.md)
+for the September 2026 changes and reproducible measurements. These results
+do not establish a fastest-in-the-world claim.
 
 Measured on an Intel i7-1355U under typical load (best of 3x15
 interleaved runs, 3200x2400 images):
@@ -33,12 +44,12 @@ image (i7-1355U, best-of-12):
 
 | image          | ptpng    | libpng+zlib-ng | speedup |
 |----------------|----------|----------------|---------|
-| graphic_pal8   | 2163 MB/s| 944 MB/s       | **2.3x**|
-| photo_rgba8    | 89 MB/s  | 60 MB/s        | **1.5x**|
-| photo_gray16   | 245 MB/s | 187 MB/s       | **1.3x**|
-| photo_rgb8     | 258 MB/s | 206 MB/s       | **1.25x**|
-| photo_gray8    | 323 MB/s | 281 MB/s       | **1.15x**|
-| graphic_rgb8   | 430 MB/s | 405 MB/s       | 1.06x   |
+| graphic_pal8   | 2163 MPix/s| 944 MPix/s   | **2.3x**|
+| photo_rgba8    | 89 MPix/s  | 60 MPix/s    | **1.5x**|
+| photo_gray16   | 245 MPix/s | 187 MPix/s   | **1.3x**|
+| photo_rgb8     | 258 MPix/s | 206 MPix/s   | **1.25x**|
+| photo_gray8    | 323 MPix/s | 281 MPix/s   | **1.15x**|
+| graphic_rgb8   | 430 MPix/s | 405 MPix/s   | 1.06x   |
 
 RGBA8 mode: ptpng wins 4 of 6; libpng+zlib-ng's fused transforms edge
 ahead on `photo_rgba8` (0.84x) and `graphic_rgb8` (0.94x).
@@ -53,7 +64,9 @@ compiled with `/arch:AVX2` (runtime-dispatched, SSE2 is the baseline).
 
 ## Building everywhere (CMake)
 
-    cmake -S . -B build && cmake --build build --config Release && ctest --test-dir build -C Release
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+    cmake --build build --config Release
+    ctest --test-dir build -C Release --output-on-failure
 
 Builds the library, tools, the vendored zlib + libpng references
 (byte-parity suite), and — when `third_party/zlib-ng-*` is present —
@@ -94,18 +107,21 @@ hIST, iCCP (decompressed profile), sPLT, eXIf and tEXt/zTXt/iTXt texts.
 - Flat root tables (litlen 10 bits, dist 8, code-length 7) with subtable
   arenas; entries precompute length/distance bases and extra-bit counts.
 - Dual-literal fast path: two literals per refill, one bounds check.
+- Fixed blocks reuse their cached tables directly, avoiding 29 KiB of
+  table copying per block.
 - Match copies: 8x64-bit moves for dist>=64, 4x64-bit for dist>=32,
   64-byte periodic-pattern scratch for 1<=dist<32; overlap-safe tails.
 
-**Checksums** (`src/ptpng_crc.c`): CRC-32 slicing-by-8; SSE2 adler32
-with descending-weight `madd` blocks (2.3 ms / 30 MB).
+**Checksums** (`src/ptpng_crc.c`, `src/ptpng_neon.c`): CRC-32 slicing-by-8;
+SSE2 and NEON Adler-32 with bounded vector sums.
 
 **Filters** (`src/ptpng_filters.c`)
 - Fused kernels: reconstruction reads the filtered bytes and writes the
   final compacted row in one pass (no separate memmove).
 - `up`: AVX2/SSE2 wide add. `sub`: blocked one-pass prefix sums - an
   in-register log-doubling per 64-byte group with a cross-register
-  pixel-carry chain (bpp 2/4/8), or scalar register chains (bpp 3/6).
+  pixel-carry chain. AVX2 and NEON dispatch also cover RGB and 16-bit RGB
+  without copying the input row first. The x86 baseline uses SSE2 only.
 - `paeth`/`avg`: the left-neighbor dependency is nonlinear, so these use
   scalar code specialized per bpp with the bpp interleaved recurrences
   carried in named locals (register chains; no store->load forwarding
@@ -135,6 +151,8 @@ rgba table; tRNS falls back to scalar.
   0-9, all zlib strategies) byte-exact vs zlib.
 - Exhaustive Paeth predictor check: all 16.7M (a,b,c) byte triples.
 - Unit tests for the checksums and SIMD filter kernels vs scalar.
+- Metadata and malformed-stream regressions, mixed DEFLATE block types,
+  decompression limits, filter tails and overlapping row buffers.
 
 To rebuild libpng+zlib references: see `build.bat` comments in
 `tests/compare_libpng.ps1` (expects `build\libpng`, `build\zlib`).

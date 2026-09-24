@@ -56,7 +56,7 @@ else()
 endif()
 
 # ---- the CLI tool and unit testers -------------------------------------
-set(PTPNG_TOOLS ptpng_tool filters_test sums_test inflate_test fuzz_png decoder_test)
+set(PTPNG_TOOLS ptpng_tool filters_test sums_test inflate_test inf_bench fuzz_png decoder_test)
 foreach(tgt ${PTPNG_TOOLS})
     add_executable(${tgt} tools/${tgt}.c)
     target_link_libraries(${tgt} PRIVATE ptpng)
