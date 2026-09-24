@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       baseline:
-        description: Optional baseline commit for paired timing (must include profile_png)
+        description: Optional full 40-character baseline commit SHA (must include profile_png)
         required: false
         default: ''
 

@@ -72,10 +72,12 @@ jobs:
           for target in decode inflate encode; do
             mkdir -p "fuzz-results/$target"
             dictionary=()
+            max_len=1048576
             if [ "$target" = decode ]; then dictionary=(-dict=tools/png.dict); fi
+            if [ "$target" = encode ]; then max_len=65544; fi
             ./build-fuzz/fuzz_$target "fuzz-corpus/$target" "${dictionary[@]}" \
               -max_total_time="$FUZZ_SECONDS" -timeout=10 -rss_limit_mb=3072 \
-              -max_len=1048576 -print_final_stats=1 \
+              -max_len="$max_len" -print_final_stats=1 \
               -artifact_prefix="fuzz-results/$target/" \
               2>&1 | tee "fuzz-results/$target.log"
             if [ "${PIPESTATUS[0]}" -ne 0 ]; then failed=1; fi
@@ -89,7 +91,7 @@ jobs:
           {
             echo '### Coverage-guided fuzzing (${{ matrix.arch }})'
             echo "Budget: $FUZZ_SECONDS seconds per target. Revision: $GITHUB_SHA."
-            echo 'ASan + UBSan; encoder/libpng and inflate/zlib differential checks enabled.'
+            echo 'ASan + UBSan; decoder and encoder/libpng, plus inflate/zlib differential checks enabled.'
             echo 'Crash inputs, logs, and the accumulated corpus are attached as artifacts.'
             echo 'These bounded campaigns do not prove that all bugs or branches are covered.'
             for target in decode inflate encode; do

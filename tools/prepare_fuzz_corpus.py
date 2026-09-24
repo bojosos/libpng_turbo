@@ -7,6 +7,7 @@ No third-party Python dependencies. Existing coverage discoveries are preserved.
 import argparse
 import hashlib
 from pathlib import Path
+import random
 import struct
 import zlib
 
@@ -159,6 +160,13 @@ def main():
                 header = bytes((width - 1, height - 1, fmt, filt, padding,
                                 index % 3, index % 4, 0))
                 save(directories["encode"], header + payload)
+    # Full-sized random pixels reach long literal runs without a short repeating
+    # payload. RGBA16 also spans the complete DEFLATE history window.
+    noise = random.Random(572).randbytes(1 << 16)
+    for fmt in (3, 7):
+        for filt in range(7):
+            header = bytes((127, 63, fmt, filt, 0, 0, 0, 0))
+            save(directories["encode"], header + noise)
     for name, directory in directories.items():
         print(f"{name}: {sum(1 for path in directory.iterdir() if path.is_file())} seeds in {directory}")
 
