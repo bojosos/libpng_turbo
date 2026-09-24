@@ -2,16 +2,18 @@
 <html>
   <head>
     <meta charset="utf-8" />
+    <meta name="color-scheme" content="dark" />
     <meta name="viewport" content="width=device-width, minimum-scale=1.0, initial-scale=1, user-scalable=yes" />
     <style>
       html {
         font-family: BlinkMacSystemFont,-apple-system,"Segoe UI",Roboto,Oxygen,Ubuntu,Cantarell,"Fira Sans","Droid Sans","Helvetica Neue",Helvetica,Arial,sans-serif;
         -webkit-font-smoothing: antialiased;
-        background-color: #fff;
+        color-scheme: dark;
+        background-color: #0d1117;
         font-size: 16px;
       }
       body {
-        color: #4a4a4a;
+        color: #c9d1d9;
         margin: 8px;
         font-size: 1em;
         font-weight: 400;
@@ -27,22 +29,28 @@
         flex-direction: column;
       }
       a {
-        color: #3273dc;
+        color: #79c0ff;
         cursor: pointer;
         text-decoration: none;
       }
       a:hover {
-        color: #000;
+        color: #a5d6ff;
+      }
+      a:focus-visible, button:focus-visible {
+        outline: 2px solid #79c0ff;
+        outline-offset: 3px;
       }
       button {
         color: #fff;
-        background-color: #3298dc;
-        border-color: transparent;
+        background-color: #238636;
+        border: 1px solid #3fb950;
+        border-radius: 6px;
+        padding: 8px 12px;
         cursor: pointer;
         text-align: center;
       }
       button:hover {
-        background-color: #2793da;
+        background-color: #2ea043;
         flex: none;
       }
       .spacer {
@@ -66,6 +74,7 @@
         flex-direction: column;
       }
       .benchmark-title {
+        color: #f0f6fc;
         font-size: 3rem;
         font-weight: 600;
         word-break: break-word;
@@ -81,6 +90,10 @@
       }
       .benchmark-chart {
         max-width: 1000px;
+        background-color: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        margin: 8px 0;
       }
     </style>
     <title>Benchmarks</title>
@@ -109,6 +122,13 @@
     <script id="main-script">
       'use strict';
       (function() {
+        // Canvas labels and grids need their own colors, separate from CSS.
+        Chart.defaults.global.defaultFontColor = '#c9d1d9';
+        Chart.defaults.scale.gridLines.color = '#30363d';
+        Chart.defaults.scale.gridLines.zeroLineColor = '#484f58';
+        Chart.defaults.global.tooltips.backgroundColor = '#21262d';
+        Chart.defaults.global.tooltips.borderColor = '#484f58';
+        Chart.defaults.global.tooltips.borderWidth = 1;
         // Colors from https://github.com/github/linguist/blob/master/lib/linguist/languages.yml
         const toolColors = {
           cargo: '#dea584',
@@ -121,9 +141,9 @@
           julia: '#a270ba',
           jmh: '#b07219',
           benchmarkdotnet: '#178600',
-          customBiggerIsBetter: '#38ff38',
-          customSmallerIsBetter: '#ff3838',
-          _: '#333333'
+          customBiggerIsBetter: '#7ee787',
+          customSmallerIsBetter: '#ff7b72',
+          _: '#a5aab3'
         };
 
         function init() {
