@@ -34,10 +34,9 @@ static int test_paeth_pred(void)
     return 0;
 }
 
-static int test_paeth_dispatch(void)
+static int test_paeth_dispatch(unsigned bpp)
 {
-    uint8_t filtered[12], above[12], output[12];
-    const unsigned bpp = 4;
+    uint8_t filtered[24], above[24], output[24];
     unsigned channel;
     int a, b, c;
     /* The first pixel reconstructs a with upper neighbor c. The second
@@ -280,7 +279,8 @@ int main(int argc, char **argv)
         return 0;
     }
     if (test_paeth_pred()) bad = 1;
-    if (test_paeth_dispatch()) bad = 1;
+    if (test_paeth_dispatch(4)) bad = 1;
+    if (test_paeth_dispatch(8)) bad = 1;
     if (test_conversions()) bad = 1;
     for (i = 0; i < 6; i++) {
         if (check_full(1, "sub", bpps[i])) bad = 1;

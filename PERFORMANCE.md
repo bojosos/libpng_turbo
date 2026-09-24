@@ -327,3 +327,60 @@ It reports payload MB/s, not aggregate read/write traffic. This is a
 measured reference rather than a theoretical PNG limit: decoding reads
 compressed data, writes raw pixels, and performs input-dependent work.
 Kernel throughput and complete-image throughput answer different questions.
+
+## Further x64 encoder and decoder work, September 25
+
+Three changes survived comparison against `98e53b0`:
+
+- RGB8-to-RGB8 and RGBA8-to-RGBA8 decoding now returns the reconstructed
+  buffer directly. This removes one allocation and a full-image copy.
+  RGB8 still ignores tRNS; RGB-to-RGBA still expands transparency.
+- AVX2 dispatch now handles the eight byte chains of RGBA16 Paeth with
+  exact eight-byte loads and stores. Its existing four-byte loop stays
+  separate. This uses 128-bit vectors in the AVX2 translation unit.
+- The x64 encoder writes completed DEFLATE bytes with an unaligned
+  64-bit store, retaining fewer than eight pending bits. The store stays
+  inside the output limit; a byte tail handles the end of the allocation.
+  Compression decisions, emitted bytes and output sizes are unchanged.
+
+Whole-image measurements used baseline and candidate DLLs loaded into
+one process on the i7-1355U. Each pair alternated order, with 21 pairs
+for the cases below, pinned to P logical CPU 2 or E logical CPU 4. Tests
+include allocations and checksums, excluding output freeing. Every warm-up
+compared complete output bytes. Thread-cycle ratios broadly agreed with
+elapsed-time ratios; frequency and background load were not controlled.
+
+| Operation / image | P-core paired speedup | E-core paired speedup |
+| --- | ---: | ---: |
+| Decode graphic_rgb8 to RGB8 | 1.56x | 1.44x |
+| Decode photo_rgba8 to RGBA8 | 1.11x | 1.07x |
+| Decode photo_rgba16_paeth, native | 1.16x | 1.18x |
+| Decode graphic_rgba16_paeth, native | 1.93x | 2.12x |
+| Encode photo_rgb8 | 1.03x | 1.12x |
+| Encode photo_rgba8 | 1.05x | 1.07x |
+
+The encoder's RGB P-core screening run measured 1.07x; the longer repeat
+above measured 1.03x. Gray and graphics encoding changes were smaller,
+with some indistinguishable from noise. Native RGBA8 decoding, which
+does not benefit from the removed output copy, remained near 0.99x in
+both core tests. The RGBA16 photo paired ranges were 1.08–1.20x on P and
+1.15–1.20x on E. The flat-color RGBA16 case spends a much larger fraction
+of its time filtering, explaining its larger whole-image gain.
+
+The new RGBA16 fixtures are synthetic 1024x768 images with Paeth on every
+row and varying low sample bytes. Reproduce them with
+`python tests/gen_bench16.py`. The nightly workflow now covers those two
+images plus the previous six, in native, RGBA8 and RGB8 decode modes.
+It independently compares benchmark pixels with libpng before timing.
+
+Validation includes all seven local CTest suites, libpng parity on the
+large benchmark images in all three output modes, and all 16.7 million
+Paeth triples through both four-byte and eight-byte dispatch. A separate
+comparison checked 2,096 raw compression streams against the old encoder
+byte-for-byte and then inflated each with zlib. This covers every length
+from 0 through 512, DEFLATE block/window boundaries and multiple patterns.
+
+Bit-scan match-length detection, a four-byte bit-writer store and moving
+writer state into a local struct did not show convincing overall gains
+in the screening tests and were not included. No new VTune collection
+was needed for these changes.

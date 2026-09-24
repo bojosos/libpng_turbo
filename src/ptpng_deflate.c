@@ -27,12 +27,32 @@ PTPNG_API_INLINE unsigned deflate_reverse8(unsigned value)
            deflate_reverse4[(value >> 4) & 15];
 }
 
-/* count is at most 31 and fewer than 32 bits remain between calls. */
+/* count is at most 31. The x64 writer keeps fewer than eight pending
+ * bits; the portable writer keeps fewer than 32. */
 PTPNG_API_INLINE int deflate_put(deflate_writer *w, uint32_t value,
                                  unsigned count)
 {
     w->bits |= (uint64_t)value << w->count;
     w->count += count;
+#if PTPNG_X64
+    {
+        unsigned bytes = w->count >> 3;
+        /* An unaligned little-endian store commits all complete bytes at
+         * once. Extra bytes stay inside the allocation and are overwritten
+         * by later writes. Close to the limit, store only valid bytes. */
+        if (w->limit - w->pos >= 8) {
+            memcpy(w->dst + w->pos, &w->bits, sizeof(w->bits));
+        } else {
+            unsigned i;
+            if (bytes > w->limit - w->pos) return 0;
+            for (i = 0; i < bytes; ++i)
+                w->dst[w->pos+i] = (uint8_t)(w->bits >> (8*i));
+        }
+        w->pos += bytes;
+        w->bits >>= bytes*8;
+        w->count &= 7;
+    }
+#else
     if (w->count >= 32) {
         uint32_t word = (uint32_t)w->bits;
         if (w->limit - w->pos < 4) return 0;
@@ -44,6 +64,7 @@ PTPNG_API_INLINE int deflate_put(deflate_writer *w, uint32_t value,
         w->bits >>= 32;
         w->count -= 32;
     }
+#endif
     return 1;
 }
 

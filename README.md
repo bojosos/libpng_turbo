@@ -178,7 +178,7 @@ CRC-32 slicing-by-8; AVX2, SSE2 and NEON Adler-32 with bounded vector sums.
   in-register log-doubling per 64-byte group with a cross-register
   pixel-carry chain. AVX2 and NEON dispatch also cover RGB and 16-bit RGB
   without copying the input row first. The x86 baseline uses SSE2 only.
-- `paeth`: AVX2 dispatch processes four-byte pixels in parallel 16-bit
+- `paeth`: AVX2 dispatch processes four- and eight-byte pixels in parallel 16-bit
   lanes, retaining the previous decoded pixel in a register. Other
   strides and CPUs use scalar predictors specialized per bytes per pixel.
 - `avg`: scalar code carries the independent channel recurrences in
@@ -188,6 +188,8 @@ CRC-32 slicing-by-8; AVX2, SSE2 and NEON Adler-32 with bounded vector sums.
 once (zero-copy for single-IDAT files); inflate writes directly into the
 final scanline buffer; unfiltering compacts rows in place; Adam7 pass
 extraction is a strided copy per row. No intermediate image copies.
+Matching RGB8 and RGBA8 output formats reuse the reconstructed pixel
+buffer, avoiding another allocation and full-image copy.
 
 **Conversions** (`src/ptpng_avx2.c`): gray/gray-alpha/16-bit expansion
 via pshufb butterflies, palette via AVX2 gather from a precombined

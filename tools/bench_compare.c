@@ -259,7 +259,7 @@ int main(int argc, char **argv)
         const char *nm = base_name(argv[i]);
         char clean[128];
         char *dot;
-        double tpt_n, tlp_n, tpt_r, tlp_r;
+        double tpt_n, tlp_n, tpt_r, tlp_r, tpt_rgb, tlp_rgb;
         size_t pixels;
         ptpng_info info;
         ptpng_opts opts;
@@ -286,7 +286,8 @@ int main(int argc, char **argv)
         if (dot) *dot = 0;
 
         if (!bench_pair(data, size, PTPNG_OUT_NATIVE, &tpt_n, &tlp_n) ||
-            !bench_pair(data, size, PTPNG_OUT_RGBA8, &tpt_r, &tlp_r)) {
+            !bench_pair(data, size, PTPNG_OUT_RGBA8, &tpt_r, &tlp_r) ||
+            !bench_pair(data, size, PTPNG_OUT_RGB8, &tpt_rgb, &tlp_rgb)) {
             fprintf(stderr, "benchmark decode failed for %s\n", nm);
             free(data);
             fclose(js);
@@ -294,12 +295,14 @@ int main(int argc, char **argv)
         }
 
         printf("%-18s [" REF_LABEL "] native: ptpng %7.2f MPix/s  ref %7.2f MPix/s (%.2fx)"
-               "   rgba8: ptpng %7.2f   ref %7.2f  (%.2fx)\n",
+               "   rgba8: ptpng %7.2f   ref %7.2f  (%.2fx)"
+               "   rgb8: ptpng %7.2f   ref %7.2f  (%.2fx)\n",
                nm,
                pixels / tpt_n / 1e6, pixels / tlp_n / 1e6,
                tlp_n / tpt_n,
                pixels / tpt_r / 1e6, pixels / tlp_r / 1e6,
-               tlp_r / tpt_r);
+               tlp_r / tpt_r,
+               pixels / tpt_rgb / 1e6, pixels / tlp_rgb / 1e6, tlp_rgb / tpt_rgb);
 
         fprintf(js,
                 "  {\"name\": \"%s/ptpng-vs-" REF_LABEL "/%s native\", \"unit\": \"MPix/s\", "
@@ -315,8 +318,16 @@ int main(int argc, char **argv)
                 tag, clean, pixels / tpt_r / 1e6, ptpng_features());
         fprintf(js,
                 "  {\"name\": \"%s/" REF_LABEL "/%s rgba8\", \"unit\": \"MPix/s\", "
+                "\"value\": %.2f},\n",
+                tag, clean, pixels / tlp_r / 1e6);
+        fprintf(js,
+                "  {\"name\": \"%s/ptpng-vs-" REF_LABEL "/%s rgb8\", \"unit\": \"MPix/s\", "
+                "\"value\": %.2f, \"extra\": \"%s\"},\n",
+                tag, clean, pixels / tpt_rgb / 1e6, ptpng_features());
+        fprintf(js,
+                "  {\"name\": \"%s/" REF_LABEL "/%s rgb8\", \"unit\": \"MPix/s\", "
                 "\"value\": %.2f}%s\n",
-                tag, clean, pixels / tlp_r / 1e6,
+                tag, clean, pixels / tlp_rgb / 1e6,
                 (i == argc - 1) ? "" : ",");
         free(data);
     }

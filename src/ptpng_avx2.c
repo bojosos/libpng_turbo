@@ -168,7 +168,7 @@ void ptpng_filter_up_avx2(uint8_t *dst, const uint8_t *src,
         dst[i] = (uint8_t)(src[i] + prev[i]);
 }
 
-/* The channels of a four-byte pixel are independent Paeth chains. Keep
+/* The bytes of a four- or eight-byte pixel are independent Paeth chains. Keep
  * the decoded pixel in 16-bit lanes and select all predictors together.
  * Scalar remains faster for three-byte pixels on some x86 cores. */
 void ptpng_filter_paeth_avx2(uint8_t *dst, const uint8_t *src,
@@ -178,6 +178,23 @@ void ptpng_filter_paeth_avx2(uint8_t *dst, const uint8_t *src,
     __m128i a = _mm_setzero_si128(), c = _mm_setzero_si128();
     const __m128i mask = _mm_set1_epi16(255);
     if (bpp != 4) {
+        if (bpp == 8) {
+            for (; i + 8 <= count; i += 8) {
+                __m128i b, s, lo, hi, threshold, predictor;
+                b = _mm_cvtepu8_epi16(_mm_loadl_epi64((const __m128i *)(prev + i)));
+                s = _mm_cvtepu8_epi16(_mm_loadl_epi64((const __m128i *)(src + i)));
+                lo = _mm_min_epi16(a, b);
+                hi = _mm_max_epi16(a, b);
+                threshold = _mm_sub_epi16(_mm_add_epi16(c, _mm_slli_epi16(c, 1)),
+                                          _mm_add_epi16(a, b));
+                predictor = _mm_blendv_epi8(hi, c, _mm_cmpgt_epi16(threshold, lo));
+                predictor = _mm_blendv_epi8(lo, predictor, _mm_cmpgt_epi16(hi, threshold));
+                a = _mm_and_si128(_mm_add_epi16(s, predictor), mask);
+                c = b;
+                _mm_storel_epi64((__m128i *)(dst + i), _mm_packus_epi16(a, a));
+            }
+            goto scalar_tail;
+        }
         ptpng_filter_paeth_scalar(dst, src, prev, count, bpp);
         return;
     }
@@ -201,6 +218,7 @@ void ptpng_filter_paeth_avx2(uint8_t *dst, const uint8_t *src,
         out = (uint32_t)_mm_cvtsi128_si32(_mm_packus_epi16(a, a));
         memcpy(dst + i, &out, 4);
     }
+scalar_tail:
     for (; i < count; i++) {
         int a = i >= bpp ? dst[i - bpp] : 0;
         int b = prev[i], c = i >= bpp ? prev[i - bpp] : 0;

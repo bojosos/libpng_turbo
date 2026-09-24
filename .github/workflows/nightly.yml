@@ -49,7 +49,9 @@ jobs:
         run: python -m pip install --quiet pillow
 
       - name: Generate benchmark images
-        run: python tests/gen_bench.py
+        run: |
+          python tests/gen_bench.py
+          python tests/gen_bench16.py
 
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_args }}
@@ -62,6 +64,9 @@ jobs:
       - name: Correctness first (a fast benchmark is worthless if wrong)
         run: ctest --test-dir build -C Release --output-on-failure
 
+      - name: Compare benchmark pixels with libpng
+        run: ./build/verify_suite tests/bench
+
       - name: Record benchmark machine
         run: python tools/bench_metadata.py machine_${{ matrix.name }}.json
 
@@ -73,14 +78,18 @@ jobs:
             tests/bench/photo_gray8.png \
             tests/bench/photo_gray16.png \
             tests/bench/graphic_pal8.png \
-            tests/bench/graphic_rgb8.png
+            tests/bench/graphic_rgb8.png \
+            tests/bench/photo_rgba16_paeth.png \
+            tests/bench/graphic_rgba16_paeth.png
           ./build/bench_zlibng ${{ matrix.name }} bench_${{ matrix.name }}_zng.json \
             tests/bench/photo_rgb8.png \
             tests/bench/photo_rgba8.png \
             tests/bench/photo_gray8.png \
             tests/bench/photo_gray16.png \
             tests/bench/graphic_pal8.png \
-            tests/bench/graphic_rgb8.png
+            tests/bench/graphic_rgb8.png \
+            tests/bench/photo_rgba16_paeth.png \
+            tests/bench/graphic_rgba16_paeth.png
         shell: bash
 
       - name: Encoder speed and output size
@@ -88,11 +97,13 @@ jobs:
           ./build/bench_encode ${{ matrix.name }} encode_${{ matrix.name }}.json \
             tests/bench/photo_rgb8.png tests/bench/photo_rgba8.png \
             tests/bench/photo_gray8.png tests/bench/photo_gray16.png \
-            tests/bench/graphic_pal8.png tests/bench/graphic_rgb8.png
+            tests/bench/graphic_pal8.png tests/bench/graphic_rgb8.png \
+            tests/bench/photo_rgba16_paeth.png tests/bench/graphic_rgba16_paeth.png
           ./build/bench_encode_zlibng ${{ matrix.name }} encode_${{ matrix.name }}_zng.json \
             tests/bench/photo_rgb8.png tests/bench/photo_rgba8.png \
             tests/bench/photo_gray8.png tests/bench/photo_gray16.png \
-            tests/bench/graphic_pal8.png tests/bench/graphic_rgb8.png
+            tests/bench/graphic_pal8.png tests/bench/graphic_rgb8.png \
+            tests/bench/photo_rgba16_paeth.png tests/bench/graphic_rgba16_paeth.png
         shell: bash
 
       - name: Filter throughput (scalar and dispatched)

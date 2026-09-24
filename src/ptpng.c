@@ -1366,7 +1366,12 @@ int ptpng_decode(const void *data, size_t size, const ptpng_opts *opts,
     zero_pad_bits(native, w, h, depth, channels_of(ct));
 
     /* ---- output conversion ---- */
-    if (opts->output_format == PTPNG_OUT_NATIVE) {
+    /* Matching 8-bit formats can return the reconstructed allocation;
+     * another full-image allocation and row copy would change no pixels. */
+    if (opts->output_format == PTPNG_OUT_NATIVE ||
+        (depth == 8 &&
+         ((ct == 6 && opts->output_format == PTPNG_OUT_RGBA8) ||
+          (ct == 2 && opts->output_format == PTPNG_OUT_RGB8)))) {
         *out = native;
         if (out_len)
             *out_len = (size_t)out_size;
