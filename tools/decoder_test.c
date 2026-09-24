@@ -226,6 +226,56 @@ static void test_mixed_blocks(void)
         CHECK(ptpng_inflate(stream, i, out, sizeof(out), 0) != PTPNG_OK);
 }
 
+static void put_bits(unsigned char *dst, unsigned *bit, unsigned v, unsigned n)
+{
+    while (n--) {
+        dst[*bit >> 3] |= (unsigned char)((v & 1) << (*bit & 7));
+        ++*bit;
+        v >>= 1;
+    }
+}
+
+static void fixed_symbol(unsigned char *dst, unsigned *bit, unsigned symbol)
+{
+    unsigned code, n, reversed = 0, i;
+    if (symbol < 144) { code = symbol + 48; n = 8; }
+    else if (symbol < 256) { code = symbol + 256; n = 9; }
+    else if (symbol < 280) { code = symbol - 256; n = 7; }
+    else { code = symbol - 280 + 192; n = 8; }
+    for (i = 0; i < n; i++) { reversed = (reversed << 1) | (code & 1); code >>= 1; }
+    put_bits(dst, bit, reversed, n);
+}
+
+static void test_repeated_byte_matches(void)
+{
+    static const unsigned bases[] = {3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,
+        31,35,43,51,59,67,83,99,115,131,163,195,227,258};
+    unsigned len;
+    for (len = 3; len <= 258; len++) {
+        unsigned char zs[32] = {0x78,0x01};
+        unsigned char *out = (unsigned char *)malloc(len + 1);
+        unsigned bit = 16, index = 0, extra, i;
+        size_t n;
+        unsigned long a = 1, b = 0;
+        put_bits(zs, &bit, 3, 3); /* final fixed block */
+        fixed_symbol(zs, &bit, 173);
+        while (index < 28 && bases[index + 1] <= len) ++index;
+        extra = index < 8 || index == 28 ? 0 : (index - 4) / 4;
+        fixed_symbol(zs, &bit, index + 257);
+        put_bits(zs, &bit, len - bases[index], extra);
+        put_bits(zs, &bit, 0, 5); /* distance one */
+        fixed_symbol(zs, &bit, 256);
+        n = (bit + 7) / 8;
+        for (i = 0; i <= len; i++) { a += 173; b += a; }
+        be32(zs + n, ((b % 65521) << 16) | (a % 65521));
+        n += 4;
+        CHECK(ptpng_inflate(zs, n, out, len + 1, 0) == PTPNG_OK);
+        for (i = 0; i <= len; i++) CHECK(out[i] == 173);
+        CHECK(ptpng_inflate(zs, n, out, len, 0) == PTPNG_E_INFLATE_SIZE);
+        free(out);
+    }
+}
+
 int main(void)
 {
     test_metadata();
@@ -233,6 +283,7 @@ int main(void)
     test_cleanup_and_chunk_order();
     test_inflate_capacity();
     test_mixed_blocks();
+    test_repeated_byte_matches();
     if (failures) return 1;
     puts("decoder: metadata, limits, and malformed chunk regressions OK");
     return 0;

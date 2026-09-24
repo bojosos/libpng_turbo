@@ -80,6 +80,28 @@ int main(void)
         }
         free(buf);
     }
+    /* Cross SIMD chunk boundaries and every AVX2 alignment, with an
+     * exact-sized allocation so sanitizers also catch tail overreads. */
+    for (i = 0; i < 32; i++) {
+        static const size_t lengths[] = {31,32,33,4095,4096,4097,8191,8192,8193};
+        for (j = 0; j < sizeof(lengths) / sizeof(lengths[0]); j++) {
+            size_t n = lengths[j], k;
+            uint8_t *allocation = (uint8_t *)malloc(n + i);
+            uint8_t *buf = allocation + i;
+            uint64_t a = 1, b = 0;
+            for (k = 0; k < n; k++) {
+                buf[k] = i & 1 ? 255 : (uint8_t)(NEXT() >> 24);
+                a += buf[k]; b += a;
+            }
+            if (ptpng_adler32(buf, n) !=
+                (uint32_t)(((b % 65521u) << 16) | (a % 65521u))) {
+                printf("adler boundary FAIL n=%zu offset=%u\n", n, i);
+                free(allocation);
+                return 1;
+            }
+            free(allocation);
+        }
+    }
     printf("checksums OK\n");
     return 0;
 }

@@ -126,3 +126,55 @@ needs corpus measurements with checksum verification enabled and tests
 for short rows, tails and fallback CPUs. A broader comparison should
 include other specialized PNG decoders and a real-image corpus before
 making a fastest-decoder claim.
+
+## VTune-guided follow-up
+
+An elevated VTune hardware sampling run on an Intel Core i7-1355U
+identified decompression, Paeth filtering and SSE2 Adler-32 as the main
+costs of decoding `graphic_rgb8.png`. Branch misprediction accounted for
+only 0.6% of P-core pipeline slots in that recording.
+
+The follow-up changes target those operations:
+
+- Distance-one DEFLATE matches fill the output directly. Previously,
+  matches longer than 32 bytes built a 64-byte periodic scratch buffer
+  before copying it to the output.
+- AVX2 Adler-32 processes 32 bytes per iteration with fixed byte weights
+  and prefix sums. The SSE2 and scalar fallbacks remain available on
+  other x86 CPUs; ARM uses the existing NEON implementation.
+- Multichannel Paeth uses an equivalent threshold calculation with fewer
+  arithmetic operations. The one-byte path retains its previous predictor
+  because the proposed replacement had no repeatable advantage.
+  Exhaustive predictor tests verify the PNG tie rules.
+
+The decoder tests cover every distance-one match length from 3 to 258
+bytes, including exact output capacity and insufficient capacity. The
+checksum tests cover unaligned inputs, vector and chunk boundaries, and
+all-255 data to exercise the accumulator bounds. `filters_test
+--bench-paeth` measures Paeth separately; nightly filter artifacts now
+include these timings alongside Sub.
+
+Local Windows measurements against `c1ed216`, identical MSVC
+`/O2 /Ob2 /Zi` builds, pinned to logical CPU 4 at AboveNormal priority:
+
+| Native decode | Median paired speedup | Range across three pairs |
+| --- | ---: | ---: |
+| graphic_rgb8 | 1.73x | 1.71–1.80x |
+| graphic_pal8 | 1.56x | 1.40–1.74x |
+| photo_rgba8 | 1.19x | 1.14–1.21x |
+| photo_rgb8 | 0.98x | 0.93–1.07x |
+| photo_gray8 | 1.03x | 0.96–1.11x |
+| photo_gray16 | 1.03x | 0.97–1.11x |
+
+Each pair ran the old and new `ptpng_tool --native --bench 16` binaries
+consecutively, alternating order between rounds, with CRC and Adler
+verification enabled. Ratios use each invocation's best decode time.
+Another project was compiling on this laptop, so absolute times drifted.
+The graphics and RGBA gains were consistent; these measurements do not
+establish a change for RGB photos or grayscale images.
+
+Three additional paired `inf_bench` runs on the extracted graphics IDAT
+stream measured inflate without Adler at 10.29–11.06 ms before and
+3.12–3.57 ms after. Adler alone on the 23,042,400 decoded bytes measured
+4.60–4.85 ms before and 3.64–3.90 ms after. These are component timings,
+not whole-image results. ARM performance must be measured on ARM hardware.

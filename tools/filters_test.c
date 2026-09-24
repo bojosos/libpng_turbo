@@ -190,23 +190,28 @@ static int test_conversions(void)
     return 0;
 }
 
-static void benchmark(void)
+static void benchmark(int paeth)
 {
     static const unsigned bpps[] = {1, 2, 3, 4, 6, 8};
     static const size_t counts[] = {127, 4096};
     unsigned b, c, i, f;
     ptpng_filter_fn kernels[] = {ptpng_filter_sub_scalar, ptpng_cpu.filter_sub};
     const char *names[] = {"scalar", "dispatched"};
+    if (paeth) {
+        kernels[0] = ptpng_filter_paeth_scalar;
+    }
     for (i = 0; i < N; i++) src[i] = (uint8_t)(NEXT() >> 24);
+    for (i = 0; i < N; i++) prev[i] = (uint8_t)(NEXT() >> 24);
     for (c = 0; c < sizeof(counts) / sizeof(counts[0]); c++) {
         for (b = 0; b < sizeof(bpps) / sizeof(bpps[0]); b++) {
             size_t count = counts[c];
-            unsigned iterations = (unsigned)(1024u * 1024u * 1024u / count);
-            for (f = 0; f < sizeof(kernels) / sizeof(kernels[0]); f++) {
+            unsigned iterations = (unsigned)((paeth ? 128u : 1024u) * 1024u * 1024u / count);
+            for (f = 0; f < (paeth ? 1u : sizeof(kernels) / sizeof(kernels[0])); f++) {
                 clock_t start = clock();
                 for (i = 0; i < iterations; i++)
                     kernels[f](got, src, prev, count, bpps[b]);
-                printf("sub %-10s bpp=%u bytes=%zu %.1f MB/s\n", names[f],
+                printf("%s %-10s bpp=%u bytes=%zu %.1f MB/s\n",
+                       paeth ? "paeth" : "sub", names[f],
                        bpps[b], count, (double)count * iterations * CLOCKS_PER_SEC /
                        ((double)(clock() - start) * 1000000.0));
             }
@@ -221,7 +226,11 @@ int main(int argc, char **argv)
     int bad = 0;
     ptpng_cpu_init();
     if (argc == 2 && strcmp(argv[1], "--bench") == 0) {
-        benchmark();
+        benchmark(0);
+        return 0;
+    }
+    if (argc == 2 && strcmp(argv[1], "--bench-paeth") == 0) {
+        benchmark(1);
         return 0;
     }
     if (test_paeth_pred()) bad = 1;

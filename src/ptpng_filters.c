@@ -21,18 +21,15 @@
 
 /* ---------------- scalar ---------------- */
 
-/* branchless predictor: abs via cmov, selects via single-condition
- * ternaries (cmov), no short-circuit && to keep MSVC from branching */
+/* Equivalent Paeth thresholds avoid three absolute differences.  Values
+ * at either threshold favor a or b over c, as the PNG tie rules require. */
 PTPNG_API_INLINE int paeth_pred(int a, int b, int c)
 {
-    int p = a + b - c;
-    int pa_ = p - a, pb_ = p - b, pc_ = p - c;
-    unsigned pa = (unsigned)(pa_ < 0 ? -pa_ : pa_);
-    unsigned pb = (unsigned)(pb_ < 0 ? -pb_ : pb_);
-    unsigned pc = (unsigned)(pc_ < 0 ? -pc_ : pc_);
-    int bc = (pb <= pc) ? b : c;       /* winner of b vs c */
-    int is_a = (pa <= pb) & (pa <= pc); /* 1 if a wins both */
-    return is_a ? a : bc;
+    int lo = a < b ? a : b;
+    int hi = a < b ? b : a;
+    int threshold = 3 * c - a - b;
+    int bc = threshold <= lo ? hi : c;
+    return threshold >= hi ? lo : bc;
 }
 
 /* non-inline export for the exhaustive unit test */
@@ -452,6 +449,20 @@ static void paeth_chain_4(uint8_t *dst, const uint8_t *src,                 \
     }                                                                       \
 }
 
+/* Keep the existing predictor for the serial single-channel path, where
+ * the threshold form has not shown a repeatable performance benefit. */
+PTPNG_API_INLINE int paeth_pred_serial(int a, int b, int c)
+{
+    int p = a + b - c;
+    int pa_ = p - a, pb_ = p - b, pc_ = p - c;
+    unsigned pa = (unsigned)(pa_ < 0 ? -pa_ : pa_);
+    unsigned pb = (unsigned)(pb_ < 0 ? -pb_ : pb_);
+    unsigned pc = (unsigned)(pc_ < 0 ? -pc_ : pc_);
+    int bc = (pb <= pc) ? b : c;
+    int is_a = (pa <= pb) & (pa <= pc);
+    return is_a ? a : bc;
+}
+
 /* bpp 1, 6, 8: memory-based recurrences (bpp 1 is a single chain;
  * 6/8 spill regardless) */
 #define GEN_MEM(PFX, BPP, PRO0, PRED)                                       \
@@ -476,7 +487,7 @@ GEN_PAETH4
 GEN_MEM(avg, 1, (prev[i] >> 1), ((a + b) >> 1))
 GEN_MEM(avg, 6, (prev[i] >> 1), ((a + b) >> 1))
 GEN_MEM(avg, 8, (prev[i] >> 1), ((a + b) >> 1))
-GEN_MEM(paeth, 1, prev[i], paeth_pred(a, b, c))
+GEN_MEM(paeth, 1, prev[i], paeth_pred_serial(a, b, c))
 GEN_MEM(paeth, 6, prev[i], paeth_pred(a, b, c))
 GEN_MEM(paeth, 8, prev[i], paeth_pred(a, b, c))
 

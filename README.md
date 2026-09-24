@@ -112,8 +112,8 @@ hIST, iCCP (decompressed profile), sPLT, eXIf and tEXt/zTXt/iTXt texts.
 - Match copies: 8x64-bit moves for dist>=64, 4x64-bit for dist>=32,
   64-byte periodic-pattern scratch for 1<=dist<32; overlap-safe tails.
 
-**Checksums** (`src/ptpng_crc.c`, `src/ptpng_neon.c`): CRC-32 slicing-by-8;
-SSE2 and NEON Adler-32 with bounded vector sums.
+**Checksums** (`src/ptpng_crc.c`, `src/ptpng_avx2.c`, `src/ptpng_neon.c`):
+CRC-32 slicing-by-8; AVX2, SSE2 and NEON Adler-32 with bounded vector sums.
 
 **Filters** (`src/ptpng_filters.c`)
 - Fused kernels: reconstruction reads the filtered bytes and writes the

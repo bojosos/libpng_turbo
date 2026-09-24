@@ -348,6 +348,51 @@ static void rgba8_p8_avx2(const uint8_t *src, uint8_t *dst, uint32_t n,
     }
 }
 
+static uint32_t adler32_avx2(const uint8_t *p, size_t n)
+{
+    const __m256i zero = _mm256_setzero_si256();
+    const __m256i ones = _mm256_set1_epi16(1);
+    const __m256i weights = _mm256_setr_epi8(
+        32,31,30,29,28,27,26,25,24,23,22,21,20,19,18,17,
+        16,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1);
+    uint32_t a = 1, b = 0;
+
+    while (n >= 32) {
+        unsigned chunk = (unsigned)(n < 4096 ? n : 4096) & ~31u;
+        __m256i sum = zero, prefix = zero, weighted = zero;
+        uint64_t sums[4], prefixes[4];
+        uint32_t terms[8], s = 0, w = 0;
+        unsigned i;
+        for (i = 0; i < chunk; i += 32) {
+            __m256i bytes = _mm256_loadu_si256((const __m256i *)(p + i));
+            prefix = _mm256_add_epi64(prefix, sum);
+            sum = _mm256_add_epi64(sum, _mm256_sad_epu8(bytes, zero));
+            /* Adjacent weighted bytes sum to at most 255*(32+31),
+             * so the signed saturating multiply-add cannot saturate. */
+            weighted = _mm256_add_epi32(weighted, _mm256_madd_epi16(
+                _mm256_maddubs_epi16(bytes, weights), ones));
+        }
+        _mm256_storeu_si256((__m256i *)sums, sum);
+        _mm256_storeu_si256((__m256i *)prefixes, prefix);
+        _mm256_storeu_si256((__m256i *)terms, weighted);
+        for (i = 0; i < 4; i++) {
+            s += (uint32_t)sums[i];
+            w += 32u * (uint32_t)prefixes[i];
+        }
+        for (i = 0; i < 8; i++) w += terms[i];
+        /* 4096*65520 + 255*4096*4097/2 + 65520 < 2^32. */
+        b = (b + chunk * a + w) % 65521u;
+        a = (a + s) % 65521u;
+        p += chunk;
+        n -= chunk;
+    }
+    while (n--) {
+        a += *p++;
+        b += a;
+    }
+    return ((b % 65521u) << 16) | (a % 65521u);
+}
+
 void ptpng_avx2_init(void)
 {
     memcpy(ptpng_cvt_table_rgba8_avx2, ptpng_cvt_table_rgba8_scalar,
@@ -356,6 +401,7 @@ void ptpng_avx2_init(void)
            sizeof(ptpng_cvt_table_rgb8_avx2));
 
     if (ptpng_cpu.avx2) {
+        ptpng_cpu.adler32 = adler32_avx2;
         ptpng_cpu.filter_sub = ptpng_filter_sub_avx2;
         ptpng_cpu.filter_up = ptpng_filter_up_avx2;
         ptpng_cpu.cvt_table_rgba8 = ptpng_cvt_table_rgba8_avx2;

@@ -524,7 +524,11 @@ have_entry:
 
                 dst = out + pos;
                 rem = len;
-                if (dist >= 32) {
+                if (dist == 1) {
+                    /* Runs are common in filtered PNG data. Avoid building
+                     * a periodic scratch buffer for a single repeated byte. */
+                    memset(dst, dst[-1], rem);
+                } else if (dist >= 32) {
                     const uint8_t *src = dst - dist;
                     if (dist >= 64) {
                         while (rem >= 64) {
@@ -585,13 +589,9 @@ have_entry:
                 } else {
                     const uint8_t *src = dst - dist;
                     size_t rem2 = len;
-                    if (dist == 1) {
-                        memset(dst, *src, rem2);
-                    } else {
-                        while (rem2--) {
-                            *dst = *src;
-                            ++dst; ++src;
-                        }
+                    while (rem2--) {
+                        *dst = *src;
+                        ++dst; ++src;
                     }
                 }
                 pos += len;

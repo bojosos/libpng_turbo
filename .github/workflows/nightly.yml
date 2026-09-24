@@ -81,7 +81,9 @@ jobs:
         shell: bash
 
       - name: Filter throughput (scalar and dispatched)
-        run: ./build/filters_test --bench | tee filters_${{ matrix.name }}.txt
+        run: |
+          ./build/filters_test --bench | tee filters_${{ matrix.name }}.txt
+          ./build/filters_test --bench-paeth | tee -a filters_${{ matrix.name }}.txt
         shell: bash
 
       - name: CPU feature report
