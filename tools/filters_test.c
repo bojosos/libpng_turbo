@@ -34,6 +34,35 @@ static int test_paeth_pred(void)
     return 0;
 }
 
+static int test_paeth_dispatch(void)
+{
+    uint8_t filtered[12], above[12], output[12];
+    const unsigned bpp = 4;
+    unsigned channel;
+    int a, b, c;
+    /* The first pixel reconstructs a with upper neighbor c. The second
+     * pixel then exercises every predictor triple inside the SIMD loop. */
+    for (a = 0; a < 256; a++)
+        for (b = 0; b < 256; b++)
+            for (c = 0; c < 256; c++) {
+                memset(filtered, 0, sizeof(filtered));
+                memset(above, 0, sizeof(above));
+                for (channel = 0; channel < bpp; channel++) {
+                    filtered[channel] = (uint8_t)(a - c);
+                    above[channel] = (uint8_t)c;
+                    above[bpp + channel] = (uint8_t)b;
+                }
+                ptpng_cpu.filter_paeth(output, filtered, above, 3 * bpp, bpp);
+                for (channel = 0; channel < bpp; channel++)
+                    if (output[bpp + channel] != paeth_ref(a, b, c)) {
+                        printf("dispatched paeth bpp=%u a=%d b=%d c=%d mismatch\n",
+                               bpp, a, b, c);
+                        return 1;
+                    }
+            }
+    return 0;
+}
+
 enum { N = 4096 };
 static uint8_t src[N + 64], ref[N + 64], got[N + 64], prev[N + 64];
 
@@ -44,6 +73,20 @@ static int check_kernel(ptpng_filter_fn fn, const char *name, unsigned bpp,
     static const unsigned gaps[] = {0, 1, 3, 15, 16, 31};
     unsigned alignment, g;
     uint8_t work[N + 128];
+    uint8_t *exact_src = (uint8_t *)malloc(count ? count : 1);
+    uint8_t *exact_prev = (uint8_t *)malloc(count ? count : 1);
+    if (!exact_src || !exact_prev) {
+        free(exact_src);
+        free(exact_prev);
+        return 1;
+    }
+    memcpy(exact_src, src, count);
+    memcpy(exact_prev, prev, count);
+    /* ASan checks the final load against exact row allocations. */
+    fn(work, exact_src, exact_prev, count, bpp);
+    free(exact_src);
+    free(exact_prev);
+    if (memcmp(work, ref, count)) return 1;
     for (alignment = 0; alignment < 16; alignment++) {
         uint8_t *dst = work + 16 + alignment;
         memset(work, 0xa5, sizeof(work));
@@ -122,6 +165,8 @@ static int check_full(int kind, const char *name, unsigned bpp)
             if (check_kernel(fn, name, bpp, count)) return 1;
         }
         /* Dispatch exercises NEON on ARM and the selected x86 path. */
+        if (kind == 4 && check_kernel(ptpng_cpu.filter_paeth,
+                                      "dispatched paeth", bpp, count)) return 1;
         if (kind == 1 || kind == 2) {
             ptpng_filter_fn fn = kind == 1 ? ptpng_cpu.filter_sub : ptpng_cpu.filter_up;
             if (check_kernel(fn, "dispatched", bpp, count)) return 1;
@@ -199,6 +244,7 @@ static void benchmark(int paeth)
     const char *names[] = {"scalar", "dispatched"};
     if (paeth) {
         kernels[0] = ptpng_filter_paeth_scalar;
+        kernels[1] = ptpng_cpu.filter_paeth;
     }
     for (i = 0; i < N; i++) src[i] = (uint8_t)(NEXT() >> 24);
     for (i = 0; i < N; i++) prev[i] = (uint8_t)(NEXT() >> 24);
@@ -206,7 +252,7 @@ static void benchmark(int paeth)
         for (b = 0; b < sizeof(bpps) / sizeof(bpps[0]); b++) {
             size_t count = counts[c];
             unsigned iterations = (unsigned)((paeth ? 128u : 1024u) * 1024u * 1024u / count);
-            for (f = 0; f < (paeth ? 1u : sizeof(kernels) / sizeof(kernels[0])); f++) {
+            for (f = 0; f < sizeof(kernels) / sizeof(kernels[0]); f++) {
                 clock_t start = clock();
                 for (i = 0; i < iterations; i++)
                     kernels[f](got, src, prev, count, bpps[b]);
@@ -234,6 +280,7 @@ int main(int argc, char **argv)
         return 0;
     }
     if (test_paeth_pred()) bad = 1;
+    if (test_paeth_dispatch()) bad = 1;
     if (test_conversions()) bad = 1;
     for (i = 0; i < 6; i++) {
         if (check_full(1, "sub", bpps[i])) bad = 1;

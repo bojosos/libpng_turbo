@@ -85,6 +85,8 @@ void ptpng_filter_sub_avx2(uint8_t *dst, const uint8_t *src,
                            const uint8_t *prev, size_t count, unsigned bpp);
 void ptpng_filter_up_avx2(uint8_t *dst, const uint8_t *src,
                           const uint8_t *prev, size_t count, unsigned bpp);
+void ptpng_filter_paeth_avx2(uint8_t *dst, const uint8_t *src,
+                             const uint8_t *prev, size_t count, unsigned bpp);
 #endif /* PTPNG_X64 */
 
 /* SIMD hookups: defined in ptpng_avx2.c (x86, built with AVX2) and
@@ -133,7 +135,7 @@ struct ptpng_cpu {
     unsigned sse2 : 1, ssse3 : 1, sse41 : 1, pclmul : 1;
     unsigned avx2 : 1, bmi1 : 1, bmi2 : 1;
     unsigned neon : 1;
-    ptpng_filter_fn filter_sub, filter_up;
+    ptpng_filter_fn filter_sub, filter_up, filter_paeth;
     const ptpng_cvt_fn *cvt_table_rgba8;
     const ptpng_cvt_fn *cvt_table_rgb8;
     uint32_t (*crc32)(const uint8_t *, size_t);

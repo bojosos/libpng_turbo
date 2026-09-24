@@ -524,7 +524,12 @@ have_entry:
 
                 dst = out + pos;
                 rem = len;
-                if (dist == 1) {
+                if (len <= 16 && dist >= 16 && out_len - pos >= 16) {
+                    /* Common photo matches fit in one vector-sized copy.
+                     * The source is decoded history, the ranges do not
+                     * overlap, and any excess store stays inside out. */
+                    memcpy(dst, dst - dist, 16);
+                } else if (dist == 1) {
                     /* Runs are common in filtered PNG data. Avoid building
                      * a periodic scratch buffer for a single repeated byte. */
                     memset(dst, dst[-1], rem);

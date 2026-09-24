@@ -122,12 +122,11 @@ CRC-32 slicing-by-8; AVX2, SSE2 and NEON Adler-32 with bounded vector sums.
   in-register log-doubling per 64-byte group with a cross-register
   pixel-carry chain. AVX2 and NEON dispatch also cover RGB and 16-bit RGB
   without copying the input row first. The x86 baseline uses SSE2 only.
-- `paeth`/`avg`: the left-neighbor dependency is nonlinear, so these use
-  scalar code specialized per bpp with the bpp interleaved recurrences
-  carried in named locals (register chains; no store->load forwarding
-  on the critical path) and a fully branchless predictor (setcc+cmov).
-  The OOO engine overlaps the 2-4 independent chains; bpp=4 runs at
-  ~4.7 cycles/byte.
+- `paeth`: AVX2 dispatch processes four-byte pixels in parallel 16-bit
+  lanes, retaining the previous decoded pixel in a register. Other
+  strides and CPUs use scalar predictors specialized per bytes per pixel.
+- `avg`: scalar code carries the independent channel recurrences in
+  registers where possible.
 
 **Pipeline**: IDAT chunks are collected as references and concatenated
 once (zero-copy for single-IDAT files); inflate writes directly into the

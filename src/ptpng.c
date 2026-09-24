@@ -96,6 +96,7 @@ void ptpng_cpu_init(void)
 #endif
     ptpng_cpu.filter_sub = ptpng_filter_sub_scalar;
     ptpng_cpu.filter_up = ptpng_filter_up_scalar;
+    ptpng_cpu.filter_paeth = ptpng_filter_paeth_scalar;
     ptpng_cpu.crc32 = ptpng_crc32_slice8;
     ptpng_cpu.adler32 = ptpng_adler32_scalar;
     ptpng_cpu.cvt_table_rgba8 = ptpng_cvt_table_rgba8_scalar;
@@ -585,6 +586,7 @@ static int unfilter_image(uint8_t *raw, uint32_t w, uint32_t h,
     unsigned bitpp = channels * depth;
     ptpng_filter_fn fsub = ptpng_cpu.filter_sub;
     ptpng_filter_fn fup = ptpng_cpu.filter_up;
+    ptpng_filter_fn fpaeth = ptpng_cpu.filter_paeth;
 
     if (!interlaced) {
         size_t rb = (size_t)((((uint64_t)w * bitpp) + 7) >> 3);
@@ -604,7 +606,7 @@ static int unfilter_image(uint8_t *raw, uint32_t w, uint32_t h,
             case 1: fsub(dst, src, prev, rb, bpp); break;
             case 2: fup(dst, src, prev, rb, bpp); break;
             case 3: ptpng_filter_avg_scalar(dst, src, prev, rb, bpp); break;
-            case 4: ptpng_filter_paeth_scalar(dst, src, prev, rb, bpp); break;
+            case 4: fpaeth(dst, src, prev, rb, bpp); break;
             }
         }
         return PTPNG_OK;
@@ -635,7 +637,7 @@ static int unfilter_image(uint8_t *raw, uint32_t w, uint32_t h,
                 case 1: fsub(row, row, prev, rbp, bpp); break;
                 case 2: fup(row, row, prev, rbp, bpp); break;
                 case 3: ptpng_filter_avg_scalar(row, row, prev, rbp, bpp); break;
-                case 4: ptpng_filter_paeth_scalar(row, row, prev, rbp, bpp); break;
+                case 4: fpaeth(row, row, prev, rbp, bpp); break;
                 }
                 prev = row;
             }

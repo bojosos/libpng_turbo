@@ -119,8 +119,9 @@ decoding and mutation fuzzing.
 
 ## Remaining performance work
 
-Paeth and Average still use scalar recurrences. They remain candidates
-for per-pixel SIMD on ARM and x86. CRC-32 still uses slicing-by-eight;
+Average and the remaining scalar Paeth strides are candidates for SIMD
+on ARM and x86. Four-byte Paeth pixels now use SIMD on AVX2 CPUs.
+CRC-32 still uses slicing-by-eight;
 hardware polynomial folding is another candidate. Any replacement
 needs corpus measurements with checksum verification enabled and tests
 for short rows, tails and fallback CPUs. A broader comparison should
@@ -205,3 +206,50 @@ continued during this run, and photo timings varied too much to establish
 reliable improvements or regressions. In particular, the E-core RGB photo
 slowdown needs an idle-machine repeat. Pinning prevents core migration;
 it does not isolate shared resources or hold CPU frequency constant.
+
+## Further x64 optimizations
+
+Four-byte Paeth pixels now use 128-bit SIMD in the AVX2 translation unit.
+The predictor operates on four 16-bit lanes, then wraps reconstructed
+bytes modulo 256. This covers RGBA8 and other four-byte pixel layouts.
+Other strides retain scalar prediction, including RGB, whose experimental
+SIMD implementation regressed on the E-core.
+
+Short DEFLATE matches with length at most 16 and distance at least 16
+use one fixed-size copy when the output allocation has 16 bytes left.
+The source lies entirely in decoded history and cannot overlap that
+copy. The logical output position advances by the actual match length.
+This avoids the larger copy loop for common photo back-references.
+
+Local measurements against `368c6b4`, the preceding code plus its timing
+documentation, used identical MSVC optimization settings. A single
+process loaded old and new libraries, verified equal decoded pixels,
+and alternated their order for 21 paired native decodes per image.
+CRC and Adler verification remained enabled, allocation was timed, and
+freeing the returned image was outside the timed interval.
+
+| Native decode | P-core CPU 2, median paired speedup | E-core CPU 4, median paired speedup |
+| --- | ---: | ---: |
+| photo_rgba8 | 1.12x | 1.10x |
+| photo_rgb8 | 1.02x | 1.08x |
+| photo_gray8 | 1.06x | 1.09x |
+| photo_gray16 | 1.05x | 1.08x |
+| graphic_rgb8 | 1.02x | 0.99x |
+| graphic_pal8 | 0.98x | 0.98x |
+
+Background compilation continued, so absolute times varied and small
+differences around 1.00x remain inconclusive. The RGBA P-core paired
+ratios had a middle-90% range of 1.08–1.23x; the E-core range was
+0.94–1.24x. Paired [Windows thread-cycle counters](https://learn.microsoft.com/en-us/windows/win32/api/realtimeapiset/nf-realtimeapiset-querythreadcycletime)
+gave corresponding RGBA medians of 1.12x and 1.11x. Those counters were
+compared directly, without converting them to elapsed time.
+
+The isolated four-byte Paeth kernel measured 2.1–2.7x scalar throughput
+on the P-core and 1.2–1.3x on the E-core for 4096-byte rows. Whole-image
+gains are smaller because decompression and other work remain.
+
+Tests cover all 16.7 million predictor triples through the dispatched
+four-byte kernel, unaligned and overlapping rows, and exact input
+allocations. Match-copy tests cover every distance from 1 to 64 and
+length from 3 to 258, with and without following literals: 32,768 cases.
+Each case also checks insufficient capacity and its output boundary.

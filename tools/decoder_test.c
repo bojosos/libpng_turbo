@@ -246,32 +246,50 @@ static void fixed_symbol(unsigned char *dst, unsigned *bit, unsigned symbol)
     put_bits(dst, bit, reversed, n);
 }
 
-static void test_repeated_byte_matches(void)
+static void test_match_copies(void)
 {
     static const unsigned bases[] = {3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,
         31,35,43,51,59,67,83,99,115,131,163,195,227,258};
-    unsigned len;
-    for (len = 3; len <= 258; len++) {
-        unsigned char zs[32] = {0x78,0x01};
-        unsigned char *out = (unsigned char *)malloc(len + 1);
-        unsigned bit = 16, index = 0, extra, i;
+    static const unsigned distances[] = {1,2,3,4,5,7,9,13,17,25,33,49};
+    unsigned len, dist, padding;
+    for (dist = 1; dist <= 64; dist++)
+    for (len = 3; len <= 258; len++)
+    for (padding = 0; padding <= 32; padding += 32) {
+        unsigned char zs[160] = {0x78,0x01}, expected[354];
+        unsigned size = dist + len + padding;
+        unsigned char *out = (unsigned char *)malloc(size);
+        unsigned bit = 16, index = 0, extra, i, dcode = 0;
         size_t n;
         unsigned long a = 1, b = 0;
+        if (!out) { CHECK(out != NULL); return; }
         put_bits(zs, &bit, 3, 3); /* final fixed block */
-        fixed_symbol(zs, &bit, 173);
+        for (i = 0; i < dist + len; i++)
+            expected[i] = (unsigned char)((i % dist) * 37 + 11);
+        for (i = 0; i < dist; i++) fixed_symbol(zs, &bit, expected[i]);
         while (index < 28 && bases[index + 1] <= len) ++index;
         extra = index < 8 || index == 28 ? 0 : (index - 4) / 4;
         fixed_symbol(zs, &bit, index + 257);
         put_bits(zs, &bit, len - bases[index], extra);
-        put_bits(zs, &bit, 0, 5); /* distance one */
+        while (dcode < 11 && distances[dcode + 1] <= dist) ++dcode;
+        for (i = 0; i < 5; i++) put_bits(zs, &bit, (dcode >> (4 - i)) & 1, 1);
+        extra = dcode < 4 ? 0 : dcode / 2 - 1;
+        put_bits(zs, &bit, dist - distances[dcode], extra);
+        /* Trailing literals exercise speculative word stores inside the
+         * allocation; padding=0 exercises the exact output boundary. */
+        for (i = dist + len; i < size; i++) {
+            expected[i] = (unsigned char)(i ^ 0xa5);
+            fixed_symbol(zs, &bit, expected[i]);
+        }
         fixed_symbol(zs, &bit, 256);
         n = (bit + 7) / 8;
-        for (i = 0; i <= len; i++) { a += 173; b += a; }
+        for (i = 0; i < size; i++) { a += expected[i]; b += a; }
         be32(zs + n, ((b % 65521) << 16) | (a % 65521));
         n += 4;
-        CHECK(ptpng_inflate(zs, n, out, len + 1, 0) == PTPNG_OK);
-        for (i = 0; i <= len; i++) CHECK(out[i] == 173);
-        CHECK(ptpng_inflate(zs, n, out, len, 0) == PTPNG_E_INFLATE_SIZE);
+        CHECK(ptpng_inflate(zs, n, out, size, 0) == PTPNG_OK);
+        CHECK(memcmp(out, expected, size) == 0);
+        out[size - 1] = 0xa5;
+        CHECK(ptpng_inflate(zs, n, out, size - 1, 0) == PTPNG_E_INFLATE_SIZE);
+        CHECK(out[size - 1] == 0xa5);
         free(out);
     }
 }
@@ -283,7 +301,7 @@ int main(void)
     test_cleanup_and_chunk_order();
     test_inflate_capacity();
     test_mixed_blocks();
-    test_repeated_byte_matches();
+    test_match_copies();
     if (failures) return 1;
     puts("decoder: metadata, limits, and malformed chunk regressions OK");
     return 0;

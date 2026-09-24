@@ -168,6 +168,49 @@ void ptpng_filter_up_avx2(uint8_t *dst, const uint8_t *src,
         dst[i] = (uint8_t)(src[i] + prev[i]);
 }
 
+/* The channels of a four-byte pixel are independent Paeth chains. Keep
+ * the decoded pixel in 16-bit lanes and select all predictors together.
+ * Scalar remains faster for three-byte pixels on some x86 cores. */
+void ptpng_filter_paeth_avx2(uint8_t *dst, const uint8_t *src,
+                             const uint8_t *prev, size_t count, unsigned bpp)
+{
+    size_t i = 0;
+    __m128i a = _mm_setzero_si128(), c = _mm_setzero_si128();
+    const __m128i mask = _mm_set1_epi16(255);
+    if (bpp != 4) {
+        ptpng_filter_paeth_scalar(dst, src, prev, count, bpp);
+        return;
+    }
+    for (; i + 4 <= count; i += 4) {
+        uint32_t sv, bv, out;
+        __m128i b, s, lo, hi, threshold, predictor;
+        memcpy(&sv, src + i, 4);
+        memcpy(&bv, prev + i, 4);
+        b = _mm_cvtepu8_epi16(_mm_cvtsi32_si128((int)bv));
+        s = _mm_cvtepu8_epi16(_mm_cvtsi32_si128((int)sv));
+        lo = _mm_min_epi16(a, b);
+        hi = _mm_max_epi16(a, b);
+        /* Values span -510..765, safely inside signed 16-bit lanes.
+         * Threshold equality must select a or b, never c. */
+        threshold = _mm_sub_epi16(_mm_add_epi16(c, _mm_slli_epi16(c, 1)),
+                                  _mm_add_epi16(a, b));
+        predictor = _mm_blendv_epi8(hi, c, _mm_cmpgt_epi16(threshold, lo));
+        predictor = _mm_blendv_epi8(lo, predictor, _mm_cmpgt_epi16(hi, threshold));
+        a = _mm_and_si128(_mm_add_epi16(s, predictor), mask);
+        c = b;
+        out = (uint32_t)_mm_cvtsi128_si32(_mm_packus_epi16(a, a));
+        memcpy(dst + i, &out, 4);
+    }
+    for (; i < count; i++) {
+        int a = i >= bpp ? dst[i - bpp] : 0;
+        int b = prev[i], c = i >= bpp ? prev[i - bpp] : 0;
+        int lo = a < b ? a : b, hi = a < b ? b : a;
+        int threshold = 3 * c - a - b;
+        int predictor = threshold >= hi ? lo : threshold <= lo ? hi : c;
+        dst[i] = (uint8_t)(src[i] + predictor);
+    }
+}
+
 /* ---- conversion tables (filled from scalar, hot entries overridden) ---- */
 
 ptpng_cvt_fn ptpng_cvt_table_rgba8_avx2[128];
@@ -404,6 +447,7 @@ void ptpng_avx2_init(void)
         ptpng_cpu.adler32 = adler32_avx2;
         ptpng_cpu.filter_sub = ptpng_filter_sub_avx2;
         ptpng_cpu.filter_up = ptpng_filter_up_avx2;
+        ptpng_cpu.filter_paeth = ptpng_filter_paeth_avx2;
         ptpng_cpu.cvt_table_rgba8 = ptpng_cvt_table_rgba8_avx2;
         ptpng_cpu.cvt_table_rgb8 = ptpng_cvt_table_rgb8_avx2;
 
