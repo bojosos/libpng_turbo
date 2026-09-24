@@ -155,7 +155,8 @@ all-255 data to exercise the accumulator bounds. `filters_test
 include these timings alongside Sub.
 
 Local Windows measurements against `c1ed216`, identical MSVC
-`/O2 /Ob2 /Zi` builds, pinned to logical CPU 4 at AboveNormal priority:
+`/O2 /Ob2 /Zi` builds, pinned to logical CPU 4, an E-core, at AboveNormal
+priority:
 
 | Native decode | Median paired speedup | Range across three pairs |
 | --- | ---: | ---: |
@@ -178,3 +179,29 @@ stream measured inflate without Adler at 10.29–11.06 ms before and
 3.12–3.57 ms after. Adler alone on the 23,042,400 decoded bytes measured
 4.60–4.85 ms before and 3.64–3.90 ms after. These are component timings,
 not whole-image results. ARM performance must be measured on ARM hardware.
+
+### Separate P-core and E-core timings
+
+Windows CPU-set topology confirms that logical CPUs 0–3 are hardware
+threads on two P-cores, and logical CPUs 4–11 are eight E-cores. The
+original VTune recording sampled work on all twelve logical CPUs.
+
+A subsequent timing-only run used logical CPU 2 for the P-core test and
+logical CPU 4 for the E-core test, with the same three-pair methodology
+and no profiler. Values below are median speedup followed by the full
+range across pairs:
+
+| Native decode | P-core | E-core |
+| --- | ---: | ---: |
+| graphic_rgb8 | 1.77x, 1.71–1.95x | 1.77x, 1.61–1.91x |
+| graphic_pal8 | 2.09x, 1.70–2.14x | 1.83x, 1.65–2.06x |
+| photo_rgb8 | 0.96x, 0.85–1.10x | 0.78x, 0.50–1.06x |
+| photo_rgba8 | 1.16x, 0.88–1.44x | 1.11x, 1.00–1.13x |
+| photo_gray8 | 0.99x, 0.94–1.12x | 0.97x, 0.76–1.05x |
+| photo_gray16 | 1.07x, 0.94–1.27x | 1.27x, 0.98–1.29x |
+
+The graphics gains persisted on both core types. Background compilation
+continued during this run, and photo timings varied too much to establish
+reliable improvements or regressions. In particular, the E-core RGB photo
+slowdown needs an idle-machine repeat. Pinning prevents core migration;
+it does not isolate shared resources or hold CPU frequency constant.
