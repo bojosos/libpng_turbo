@@ -5,20 +5,30 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 #include "ptpng.h"
 
 static double now_sec(void)
 {
+#ifdef _WIN32
+    LARGE_INTEGER count, frequency;
+    QueryPerformanceCounter(&count);
+    QueryPerformanceFrequency(&frequency);
+    return (double)count.QuadPart / (double)frequency.QuadPart;
+#else
     struct timespec ts;
-    timespec_get(&ts, TIME_UTC);
+    clock_gettime(CLOCK_MONOTONIC, &ts);
     return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
+#endif
 }
 
 static const char *file_base(const char *p)
 {
     const char *s = strrchr(p, '\\');
     const char *s2 = strrchr(p, '/');
-    if (s2 > s) s = s2;
+    if (s2 && (!s || s2 > s)) s = s2;
     return s ? s + 1 : p;
 }
 
@@ -81,6 +91,8 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    if (info_only)
+        printf("%s | features: %s\n", ptpng_version(), ptpng_features());
     printf("%s: %ux%u depth=%u ct=%u interlace=%u ch=%u out=%zu",
            file_base(path), info.width, info.height, info.bit_depth,
            info.color_type, info.interlace, info.channels, out_len);

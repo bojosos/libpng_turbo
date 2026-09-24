@@ -32,7 +32,8 @@
 #include <intrin.h>
 #elif defined(PTPNG_X86)
 #include <x86intrin.h>
-#elif defined(PTPNG_ARM_NEON)
+#endif
+#if defined(PTPNG_ARM_NEON)
 #include <arm_neon.h>
 #endif
 
@@ -41,13 +42,8 @@ uint32_t ptpng_crc32(const uint8_t *p, size_t n);   /* dispatching */
 uint32_t ptpng_adler32(const uint8_t *p, size_t n); /* dispatching */
 uint32_t ptpng_crc32_slice8(const uint8_t *p, size_t n);
 uint32_t ptpng_adler32_scalar(const uint8_t *p, size_t n);
-#if defined(_M_X64) || defined(_M_AMD64) || defined(__x86_64__)
-#define PTPNG_X64 1
+#if PTPNG_X64
 uint32_t ptpng_adler32_sse2(const uint8_t *p, size_t n);
-void ptpng_filter_sub_sse2(uint8_t *row, const uint8_t *prev,
-                           size_t count, unsigned bpp);
-void ptpng_filter_up_sse2(uint8_t *row, const uint8_t *prev,
-                          size_t count, unsigned bpp);
 #endif
 
 /* ---- inflate --------------------------------------------------------- */
@@ -98,8 +94,6 @@ void ptpng_avx2_init(void);
 #endif
 #if PTPNG_ARM_NEON
 void ptpng_neon_init(void);
-extern ptpng_cvt_fn ptpng_cvt_table_rgba8_neon[128];
-extern ptpng_cvt_fn ptpng_cvt_table_rgb8_neon[128];
 void ptpng_filter_up_neon(uint8_t *dst, const uint8_t *src,
                           const uint8_t *prev, size_t count, unsigned bpp);
 #endif
@@ -124,6 +118,10 @@ struct ptpng_cvt {
 /* table index: (color_type << 4) | log2(bit_depth), 128 entries */
 extern const ptpng_cvt_fn ptpng_cvt_table_rgba8_scalar[128];
 extern const ptpng_cvt_fn ptpng_cvt_table_rgb8_scalar[128];
+#if PTPNG_ARM_NEON
+extern ptpng_cvt_fn ptpng_cvt_table_rgba8_neon[128];
+extern ptpng_cvt_fn ptpng_cvt_table_rgb8_neon[128];
+#endif
 #if PTPNG_X86
 /* filled at init from the scalar tables, then overridden */
 extern ptpng_cvt_fn ptpng_cvt_table_rgba8_avx2[128];

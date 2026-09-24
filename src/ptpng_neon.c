@@ -10,6 +10,102 @@
 
 /* ---- filters ---- */
 
+/* Prefix sums within each register, then repeat the final pixel as the
+ * carry for the following register. The table also rotates RGB carries
+ * when a register ends partway through a pixel. */
+#define SUB_PREFIX(v, BPP)                                               \
+    (v) = vaddq_u8((v), vextq_u8(zero, (v), 16 - (BPP)));                \
+    if ((BPP) < 8) (v) = vaddq_u8((v),                                  \
+        vextq_u8(zero, (v), (16 - (BPP) * 2) & 15));                     \
+    if ((BPP) < 4) (v) = vaddq_u8((v),                                  \
+        vextq_u8(zero, (v), (16 - (BPP) * 4) & 15));                     \
+    if ((BPP) == 1) (v) = vaddq_u8((v), vextq_u8(zero, (v), 8));
+
+#define SUB_BLOCKS(BPP, ...)                                             \
+    {                                                                    \
+        static const uint8x16_t ctrl = {__VA_ARGS__};                     \
+        const uint8x16_t zero = vdupq_n_u8(0);                            \
+        uint8x16_t carry = zero;                                         \
+        size_t i = 0;                                                    \
+        for (; i + 64 <= count; i += 64) {                               \
+            uint8x16_t v0 = vld1q_u8(src + i);                           \
+            uint8x16_t v1 = vld1q_u8(src + i + 16);                      \
+            uint8x16_t v2 = vld1q_u8(src + i + 32);                      \
+            uint8x16_t v3 = vld1q_u8(src + i + 48);                      \
+            SUB_PREFIX(v0, BPP) SUB_PREFIX(v1, BPP)                      \
+            SUB_PREFIX(v2, BPP) SUB_PREFIX(v3, BPP)                      \
+            v0 = vaddq_u8(v0, carry);                                    \
+            v1 = vaddq_u8(v1, vqtbl1q_u8(v0, ctrl));                      \
+            v2 = vaddq_u8(v2, vqtbl1q_u8(v1, ctrl));                      \
+            v3 = vaddq_u8(v3, vqtbl1q_u8(v2, ctrl));                      \
+            carry = vqtbl1q_u8(v3, ctrl);                                \
+            vst1q_u8(dst + i, v0);                                      \
+            vst1q_u8(dst + i + 16, v1);                                 \
+            vst1q_u8(dst + i + 32, v2);                                 \
+            vst1q_u8(dst + i + 48, v3);                                 \
+        }                                                                \
+        for (; i + 16 <= count; i += 16) {                               \
+            uint8x16_t v = vld1q_u8(src + i);                            \
+            SUB_PREFIX(v, BPP)                                          \
+            v = vaddq_u8(v, carry);                                      \
+            carry = vqtbl1q_u8(v, ctrl);                                 \
+            vst1q_u8(dst + i, v);                                       \
+        }                                                                \
+        for (; i < count; i++)                                          \
+            dst[i] = (uint8_t)(src[i] + (i >= (BPP) ? dst[i - (BPP)] : 0));\
+        return;                                                          \
+    }
+
+static void ptpng_filter_sub_neon(uint8_t *dst, const uint8_t *src,
+                                 const uint8_t *prev, size_t count, unsigned bpp)
+{
+    switch (bpp) {
+    case 1: SUB_BLOCKS(1, 15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15)
+    case 2: SUB_BLOCKS(2, 14,15,14,15,14,15,14,15,14,15,14,15,14,15,14,15)
+    case 3: SUB_BLOCKS(3, 13,14,15,13,14,15,13,14,15,13,14,15,13,14,15,13)
+    case 4: SUB_BLOCKS(4, 12,13,14,15,12,13,14,15,12,13,14,15,12,13,14,15)
+    case 6: SUB_BLOCKS(6, 10,11,12,13,14,15,10,11,12,13,14,15,10,11,12,13)
+    case 8: SUB_BLOCKS(8, 8,9,10,11,12,13,14,15,8,9,10,11,12,13,14,15)
+    default: ptpng_filter_sub_scalar(dst, src, prev, count, bpp);
+    }
+}
+
+#undef SUB_BLOCKS
+#undef SUB_PREFIX
+
+/* Modulo reduction every 2048 bytes keeps the weighted sum below 2^31,
+ * even for all-255 input. Accumulate four independent sums per vector. */
+static uint32_t ptpng_adler32_neon(const uint8_t *p, size_t n)
+{
+    static const uint8x8_t weight_lo = {16, 15, 14, 13, 12, 11, 10, 9};
+    static const uint8x8_t weight_hi = {8, 7, 6, 5, 4, 3, 2, 1};
+    uint32_t a = 1, b = 0;
+    while (n >= 16) {
+        unsigned chunk = n < 2048 ? (unsigned)n : 2048;
+        uint32x4_t sums = vdupq_n_u32(0), weighted = vdupq_n_u32(0);
+        unsigned i;
+        chunk &= ~15u;
+        for (i = 0; i < chunk; i += 16) {
+            uint8x16_t bytes = vld1q_u8(p + i);
+            uint16x8_t weights = vaddq_u16(
+                vmull_u8(vget_low_u8(bytes), weight_lo),
+                vmull_u8(vget_high_u8(bytes), weight_hi));
+            weighted = vaddq_u32(weighted, vshlq_n_u32(sums, 4));
+            weighted = vpadalq_u16(weighted, weights);
+            sums = vpadalq_u16(sums, vpaddlq_u8(bytes));
+        }
+        b = (b + chunk * a + vaddvq_u32(weighted)) % 65521u;
+        a = (a + vaddvq_u32(sums)) % 65521u;
+        p += chunk;
+        n -= chunk;
+    }
+    while (n--) {
+        a += *p++;
+        b += a;
+    }
+    return ((b % 65521u) << 16) | (a % 65521u);
+}
+
 void ptpng_filter_up_neon(uint8_t *dst, const uint8_t *src,
                           const uint8_t *prev, size_t count, unsigned bpp)
 {
@@ -124,6 +220,8 @@ void ptpng_neon_init(void)
 
     if (!ptpng_cpu.neon)
         return;
+    ptpng_cpu.filter_sub = ptpng_filter_sub_neon;
+    ptpng_cpu.adler32 = ptpng_adler32_neon;
     ptpng_cpu.filter_up = ptpng_filter_up_neon;
     ptpng_cpu.cvt_table_rgba8 = ptpng_cvt_table_rgba8_neon;
     ptpng_cpu.cvt_table_rgb8 = ptpng_cvt_table_rgb8_neon;

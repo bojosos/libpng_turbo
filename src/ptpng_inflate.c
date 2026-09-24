@@ -207,8 +207,8 @@ static int build_table(uint32_t *root, uint32_t *arena, unsigned root_bits,
 
 /* fixed Huffman tables, built once */
 static struct {
-    uint32_t lit_root[LITLEN_SIZE], lit_arena[LITLEN_ARENA];
-    uint32_t dist_root[DIST_SIZE], dist_arena[DIST_ARENA];
+    uint32_t lit_root[LITLEN_SIZE];
+    uint32_t dist_root[DIST_SIZE];
     int ready;
 } fixed_tabs;
 
@@ -221,11 +221,11 @@ static int build_fixed(void)
     for (; i < 256; i++) lens[i] = 9;
     for (; i < 280; i++) lens[i] = 7;
     for (; i < 288; i++) lens[i] = 8;
-    rc = build_table(fixed_tabs.lit_root, fixed_tabs.lit_arena, LITLEN_ROOT,
+    rc = build_table(fixed_tabs.lit_root, NULL, LITLEN_ROOT,
                      lens, 288, 0);
     if (rc) return rc;
     for (i = 0; i < 32; i++) lens[i] = 5;
-    rc = build_table(fixed_tabs.dist_root, fixed_tabs.dist_arena, DIST_ROOT,
+    rc = build_table(fixed_tabs.dist_root, NULL, DIST_ROOT,
                      lens, 32, 1);
     if (rc) return rc;
     fixed_tabs.ready = 1;
@@ -235,7 +235,8 @@ static int build_fixed(void)
 /* --------------------------------------------------------------------- */
 
 static int inflate_impl(const uint8_t *in, size_t in_len, uint8_t *out,
-                        size_t out_len, uint32_t flags, size_t *produced)
+                        size_t out_len, uint32_t flags, int exact_size,
+                        size_t *produced)
 {
     const uint8_t *in_end = in + in_len;
     uint64_t bitbuf = 0;
@@ -243,8 +244,9 @@ static int inflate_impl(const uint8_t *in, size_t in_len, uint8_t *out,
     size_t pos = 0;
     /* single-stream by contract (PNG decodes one zlib stream at a time):
      * decode tables live in .bss instead of a ~30KB stack frame */
-    static uint32_t lit_tbl[LITLEN_SIZE], lit_arena[LITLEN_ARENA];
-    static uint32_t dist_tbl[DIST_SIZE], dist_arena[DIST_ARENA];
+    static uint32_t dynamic_lit[LITLEN_SIZE], lit_arena[LITLEN_ARENA];
+    static uint32_t dynamic_dist[DIST_SIZE], dist_arena[DIST_ARENA];
+    const uint32_t *lit_tbl = dynamic_lit, *dist_tbl = dynamic_dist;
     static uint32_t cl_tbl[CL_SIZE];
 
     *produced = 0;
@@ -266,7 +268,7 @@ static int inflate_impl(const uint8_t *in, size_t in_len, uint8_t *out,
 #define REFILL()                                                        \
     do {                                                                \
         if (bitcnt >= 0 && bitcnt < 48) {                               \
-            if (in + 8 <= in_end) {                                     \
+            if ((size_t)(in_end - in) >= 8) {                            \
                 bitbuf |= LOAD64LE(in) << bitcnt;                       \
                 in += (64 - bitcnt) >> 3;                               \
                 bitcnt += (64 - bitcnt) & ~7;                           \
@@ -286,7 +288,7 @@ static int inflate_impl(const uint8_t *in, size_t in_len, uint8_t *out,
         unsigned bfinal, btype, v;
 
         REFILL();
-        if (bitcnt < 1)
+        if (bitcnt < 3)
             return PTPNG_E_TRUNCATED;
         bfinal = PEEK32() & 1; DROP(1);
         btype = PEEK32() & 3; DROP(2);
@@ -322,10 +324,10 @@ static int inflate_impl(const uint8_t *in, size_t in_len, uint8_t *out,
                 int rc = build_fixed();
                 if (rc) return rc;
             }
-            memcpy(lit_tbl, fixed_tabs.lit_root, sizeof(lit_tbl));
-            memcpy(lit_arena, fixed_tabs.lit_arena, sizeof(lit_arena));
-            memcpy(dist_tbl, fixed_tabs.dist_root, sizeof(dist_tbl));
-            memcpy(dist_arena, fixed_tabs.dist_arena, sizeof(dist_arena));
+            /* Fixed codes fit entirely in the roots. Reuse the cached
+             * tables without copying 29 KiB for each fixed block. */
+            lit_tbl = fixed_tabs.lit_root;
+            dist_tbl = fixed_tabs.dist_root;
         } else if (btype == 2) {
             /* dynamic Huffman block */
             unsigned hlit, hdist, hclen, i, v2;
@@ -396,9 +398,11 @@ static int inflate_impl(const uint8_t *in, size_t in_len, uint8_t *out,
                     }
                 }
             }
-            rc = build_table(lit_tbl, lit_arena, LITLEN_ROOT, lens, hlit, 0);
+            lit_tbl = dynamic_lit;
+            dist_tbl = dynamic_dist;
+            rc = build_table(dynamic_lit, lit_arena, LITLEN_ROOT, lens, hlit, 0);
             if (rc) return rc;
-            rc = build_table(dist_tbl, dist_arena, DIST_ROOT, lens + hlit,
+            rc = build_table(dynamic_dist, dist_arena, DIST_ROOT, lens + hlit,
                              hdist, 1);
             if (rc) return rc;
         } else {
@@ -423,7 +427,7 @@ static int inflate_impl(const uint8_t *in, size_t in_len, uint8_t *out,
                     e = lit_tbl[PEEK32() & (LITLEN_SIZE - 1)];
                     nb = e & 0xF;
                     if ((e & (F_LIT | F_SUB)) == F_LIT && nb != 0 &&
-                        bitcnt >= nb) {
+                        (unsigned)bitcnt >= nb) {
                         out[pos + 1] = (uint8_t)(e >> 8);
                         bitbuf >>= nb; bitcnt -= nb;
                         pos += 2;
@@ -606,12 +610,14 @@ have_entry:
     /* byte-align and locate the adler32: pushing back floor(bitcnt/8)
      * whole bytes lands exactly on the byte after the final code's
      * padding bits */
+    if (bitcnt < 0)
+        return PTPNG_E_TRUNCATED;
     in -= bitcnt >> 3;
     bitbuf = 0; bitcnt = 0;
 
     if ((size_t)(in_end - in) < 4)
         return PTPNG_E_TRUNCATED;
-    if (pos != out_len)
+    if (exact_size && pos != out_len)
         return PTPNG_E_INFLATE_SIZE;
 
     if (!(flags & PTPNG_INF_NO_ADLER)) {
@@ -636,7 +642,7 @@ int ptpng_inflate(const uint8_t *in, size_t in_len, uint8_t *out,
     size_t produced;
     if (!in || !out || out_len == 0)
         return PTPNG_E_BAD_ARG;
-    return inflate_impl(in, in_len, out, out_len, flags, &produced);
+    return inflate_impl(in, in_len, out, out_len, flags, 1, &produced);
 }
 
 int ptpng_inflate_dyn(const uint8_t *in, size_t in_len, size_t max_out,
@@ -645,27 +651,29 @@ int ptpng_inflate_dyn(const uint8_t *in, size_t in_len, size_t max_out,
     size_t cap = 4096, produced = 0;
     uint8_t *buf;
     int rc;
-    if (!in || !out || !out_len || in_len == 0)
+    if (!in || !out || !out_len || in_len == 0 || max_out == SIZE_MAX)
         return PTPNG_E_BAD_ARG;
+    *out = NULL;
+    *out_len = 0;
     if (cap > max_out) cap = max_out;
     if (cap == 0) return PTPNG_E_BAD_ARG;
     for (;;) {
-        buf = (uint8_t *)malloc(cap);
+        buf = (uint8_t *)malloc(cap + 1);
         if (!buf) return PTPNG_E_OUT_OF_MEMORY;
-        rc = inflate_impl(in, in_len, buf, cap, PTPNG_INF_NO_ADLER,
+        rc = inflate_impl(in, in_len, buf, cap, 0, 0,
                           &produced);
         if (rc == PTPNG_OK)
             break;
         free(buf);
         if (rc != PTPNG_E_INFLATE_SIZE || cap >= max_out)
             return rc;
-        cap *= 2;
-        if (cap > max_out) cap = max_out;
+        cap = cap > max_out / 2 ? max_out : cap * 2;
     }
     if (produced != cap) {
-        uint8_t *nb = (uint8_t *)realloc(buf, produced ? produced : 1);
+        uint8_t *nb = (uint8_t *)realloc(buf, produced + 1);
         if (nb) buf = nb;
     }
+    buf[produced] = 0; /* compressed PNG text is exposed as a C string */
     *out = buf;
     *out_len = produced;
     return PTPNG_OK;

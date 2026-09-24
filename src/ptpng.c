@@ -4,6 +4,9 @@
  */
 #include "ptpng_internal.h"
 #include <stdio.h>
+#if PTPNG_X86 && !defined(_MSC_VER)
+#include <cpuid.h>
+#endif
 
 #if PTPNG_X86
 static unsigned long long pt_tsc(void) { return __rdtsc(); }
@@ -699,11 +702,13 @@ static void zero_pad_bits(uint8_t *buf, uint32_t w, uint32_t h,
 
 static void *pt_track(ptpng_info *info, size_t sz)
 {
-    void *p = malloc(sz);
+    void *p;
+    if (info->_n_allocs >= PT_MAX_ALLOC)
+        return NULL;
+    p = malloc(sz);
     if (!p)
         return NULL;
-    if (info->_n_allocs < PT_MAX_ALLOC)
-        info->_allocs[info->_n_allocs++] = p;
+    info->_allocs[info->_n_allocs++] = p;
     return p;
 }
 
@@ -711,8 +716,10 @@ static int pt_adopt(ptpng_info *info, void *p)
 {
     if (!p)
         return 0;
-    if (info->_n_allocs >= PT_MAX_ALLOC)
+    if (info->_n_allocs >= PT_MAX_ALLOC) {
+        free(p);
         return 0;
+    }
     info->_allocs[info->_n_allocs++] = p;
     return 1;
 }
@@ -801,7 +808,7 @@ int ptpng_decode(const void *data, size_t size, const ptpng_opts *opts,
         return PTPNG_E_BAD_SIGNATURE;
 
     {
-    unsigned long long P0 = 0, P1, P2, P3, P4, P5;
+    unsigned long long P0 = 0, P1 = 0, P2 = 0, P3 = 0, P4;
     int prof = getenv("PTPNG_PROF") != NULL;
     if (prof) P0 = pt_tsc();
 
@@ -834,10 +841,10 @@ int ptpng_decode(const void *data, size_t size, const ptpng_opts *opts,
             if (!skip_chunk) {
                 if (!have_ihdr) {
                     if (type != CH_IHDR)
-                        return critical ? PTPNG_E_CHUNK_ORDER
-                                        : PTPNG_E_CHUNK_ORDER;
+                        { rc = PTPNG_E_CHUNK_ORDER; goto fail_cleanup; }
                 } else if (type == CH_IHDR) {
-                    return PTPNG_E_CHUNK_ORDER; /* duplicate */
+                    rc = PTPNG_E_CHUNK_ORDER;
+                    goto fail_cleanup; /* duplicate */
                 }
 
                 switch (type) {
@@ -893,7 +900,6 @@ int ptpng_decode(const void *data, size_t size, const ptpng_opts *opts,
                         struct idat_ref *nr = (struct idat_ref *)realloc(
                             idat_refs, nc * sizeof(*nr));
                         if (!nr) {
-                            free(idat_refs);
                             { rc = PTPNG_E_OUT_OF_MEMORY; goto fail_cleanup; }
                         }
                         idat_refs = nr;
@@ -906,6 +912,8 @@ int ptpng_decode(const void *data, size_t size, const ptpng_opts *opts,
                     break;
 
                 case CH_IEND:
+                    if (len != 0)
+                        { rc = PTPNG_E_BAD_CHUNK_LEN; goto fail_cleanup; }
                     have_iend = 1;
                     pos = size; /* ignore anything after IEND */
                     continue;
@@ -1021,9 +1029,9 @@ int ptpng_decode(const void *data, size_t size, const ptpng_opts *opts,
                 case CH_TIME:
                     if (len != 7)
                         break;
-                    if (cdata[0] > 99 || cdata[1] < 1 || cdata[1] > 12 ||
-                        cdata[2] < 1 || cdata[2] > 31 || cdata[3] > 23 ||
-                        cdata[4] > 59 || cdata[5] > 60)
+                    if (cdata[2] < 1 || cdata[2] > 12 ||
+                        cdata[3] < 1 || cdata[3] > 31 || cdata[4] > 23 ||
+                        cdata[5] > 59 || cdata[6] > 60)
                         break;
                     memcpy(linfo.tIME, cdata, 7);
                     linfo.has_tIME = 1;
@@ -1033,7 +1041,8 @@ int ptpng_decode(const void *data, size_t size, const ptpng_opts *opts,
                     size_t i;
                     uint16_t *ht;
                     if (idat_state || len % 2 != 0 ||
-                        len / 2 != linfo.num_palette || linfo.num_palette == 0)
+                        len / 2 != linfo.num_palette || linfo.num_palette == 0 ||
+                        linfo.has_hIST || linfo._n_allocs >= PT_MAX_ALLOC)
                         break;
                     ht = (uint16_t *)pt_track(&linfo, len);
                     linfo.hIST = ht;
@@ -1052,7 +1061,8 @@ int ptpng_decode(const void *data, size_t size, const ptpng_opts *opts,
                     const uint8_t *p = cdata, *end = cdata + len;
                     const uint8_t *after_kw;
                     ptpng_text *t;
-                    if (linfo.num_texts >= PTPNG_MAX_TEXT)
+                    if (linfo.num_texts >= PTPNG_MAX_TEXT ||
+                        linfo._n_allocs > PT_MAX_ALLOC - (type == CH_ITXT ? 4 : 2))
                         break;
                     after_kw = find_nul(p, end);
                     if (!after_kw || after_kw - p - 1 > 79 ||
@@ -1083,7 +1093,7 @@ int ptpng_decode(const void *data, size_t size, const ptpng_opts *opts,
                         if (p + 2 > end)
                             break;
                         cflag = p[0]; cmethod = p[1];
-                        if (cmethod != 0)
+                        if (cflag > 1 || cmethod != 0)
                             break;
                         p += 2;
                         after_lang = find_nul(p, end);
@@ -1124,17 +1134,18 @@ int ptpng_decode(const void *data, size_t size, const ptpng_opts *opts,
                     const uint8_t *after_kw;
                     ptpng_splt *s;
                     size_t posn, esz;
-                    if (linfo.num_splts >= PTPNG_MAX_SPLT)
+                    if (linfo.num_splts >= PTPNG_MAX_SPLT ||
+                        linfo._n_allocs > PT_MAX_ALLOC - 2)
                         break;
                     after_kw = find_nul(p, end);
-                    if (!after_kw || after_kw - p - 1 > 79)
+                    if (!after_kw || after_kw - p == 1 || after_kw - p - 1 > 79)
                         break;
                     p = after_kw;
                     if (p >= end || (*p != 8 && *p != 16))
                         break;
-                    esz = (*p == 8) ? 3 : 6;
+                    esz = (*p == 8) ? 6 : 10;
                     p++;
-                    if ((size_t)(end - p) % esz != 0)
+                    if (p == end || (size_t)(end - p) % esz != 0)
                         break;
                     s = &linfo.splts[linfo.num_splts];
                     memset(s, 0, sizeof(*s));
@@ -1150,7 +1161,7 @@ int ptpng_decode(const void *data, size_t size, const ptpng_opts *opts,
                         memcpy(cp, cdata, len);
                         s->entries = cp + posn;
                     }
-                    s->sample_depth = (uint8_t)(esz == 3 ? 8 : 16);
+                    s->sample_depth = (uint8_t)(esz == 6 ? 8 : 16);
                     linfo.num_splts++;
                     break;
                 }
@@ -1159,7 +1170,8 @@ int ptpng_decode(const void *data, size_t size, const ptpng_opts *opts,
                     const uint8_t *p = cdata, *end = cdata + len;
                     const uint8_t *after_kw;
                     uint8_t *dec; size_t dlen;
-                    if (idat_state || linfo.has_iCCP)
+                    if (idat_state || linfo.has_iCCP ||
+                        linfo._n_allocs >= PT_MAX_ALLOC)
                         break;
                     after_kw = find_nul(p, end);
                     if (!after_kw || after_kw - p - 1 > 79)
@@ -1186,7 +1198,8 @@ int ptpng_decode(const void *data, size_t size, const ptpng_opts *opts,
                 }
 
                 case CH_EXIF:
-                    if (linfo.has_eXIf || len == 0)
+                    if (linfo.has_eXIf || len == 0 ||
+                        linfo._n_allocs >= PT_MAX_ALLOC)
                         break;
                     {
                         uint8_t *cp = (uint8_t *)pt_track(&linfo, len);
@@ -1282,8 +1295,9 @@ int ptpng_decode(const void *data, size_t size, const ptpng_opts *opts,
     raw = (uint8_t *)malloc((size_t)raw_size);
     zeros = (uint8_t *)calloc(rb + 16, 1);
     if (!raw || !zeros) {
-        free(raw); free(zeros); free(idat_refs);
-        return PTPNG_E_OUT_OF_MEMORY;
+        free(raw); free(zeros);
+        rc = PTPNG_E_OUT_OF_MEMORY;
+        goto fail_cleanup;
     }
     /* materialize the zlib stream: zero-copy for a single IDAT chunk */
     if (n_idat_refs == 1) {
@@ -1292,8 +1306,9 @@ int ptpng_decode(const void *data, size_t size, const ptpng_opts *opts,
         size_t off = 0, i;
         idat_buf = (uint8_t *)malloc(idat_total);
         if (!idat_buf) {
-            free(raw); free(zeros); free(idat_refs);
-            return PTPNG_E_OUT_OF_MEMORY;
+            free(raw); free(zeros);
+            rc = PTPNG_E_OUT_OF_MEMORY;
+            goto fail_cleanup;
         }
         for (i = 0; i < n_idat_refs; i++) {
             memcpy(idat_buf + off, idat_refs[i].p, idat_refs[i].len);

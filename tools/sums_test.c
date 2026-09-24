@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <intrin.h>
 #include "ptpng_internal.h"
 
 int main(void)
@@ -49,27 +48,6 @@ int main(void)
                     printf("bytes:");
                     for (k = 0; k < n; k++) printf(" %02x", buf[k]);
                     printf("\n");
-#if defined(_M_X64)
-                    {
-                        const __m128i zero = _mm_setzero_si128();
-                        const __m128i ones = _mm_set1_epi16(1);
-                        __m128i d = _mm_loadu_si128((const __m128i *)buf);
-                        __m128i lo16 = _mm_unpacklo_epi8(d, zero);
-                        __m128i hi16 = _mm_unpackhi_epi8(d, zero);
-                        __m128i w = _mm_setr_epi8(16, 15, 14, 13, 12, 11,
-                                                  10, 9, 8, 7, 6, 5, 4, 3,
-                                                  2, 1);
-                        __m128i S1 = _mm_madd_epi16(lo16, ones);
-                        __m128i W1 = _mm_madd_epi16(lo16, w);
-                        int s4[4], w4[4];
-                        _mm_storeu_si128((__m128i *)s4, S1);
-                        _mm_storeu_si128((__m128i *)w4, W1);
-                        printf("lo16 madd-ones lanes: %d %d %d %d\n",
-                               s4[0], s4[1], s4[2], s4[3]);
-                        printf("lo16 madd-w lanes: %d %d %d %d\n",
-                               w4[0], w4[1], w4[2], w4[3]);
-                    }
-#endif
                     {
                         uint32_t W = 0;
                         for (k = 0; k < n; k++)

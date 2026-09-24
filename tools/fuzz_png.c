@@ -37,7 +37,7 @@ static int mutate_and_decode(const uint8_t *orig, size_t len, int mode)
     static uint8_t buf[1 << 20];
     size_t n = len;
     int i, nmut;
-    if (len > sizeof(buf))
+    if (len == 0 || len > sizeof(buf))
         return 0;
     memcpy(buf, orig, len);
 
@@ -96,10 +96,6 @@ static int mutate_and_decode(const uint8_t *orig, size_t len, int mode)
         rc = ptpng_decode(buf, n, &opts, &out, &olen, NULL);
         if (rc == PTPNG_OK)
             ptpng_free(out);
-    }
-    if ((i & 1023) == 1023) {
-        printf("  iter %llu ok\n", i);
-        fflush(stdout);
     }
     return 1;
 }

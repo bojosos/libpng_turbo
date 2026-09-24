@@ -25,12 +25,15 @@ jobs:
           - name: macos-arm64
             os: macos-14
             cc: clang
+            cmake_args: -DCMAKE_OSX_ARCHITECTURES=arm64
           - name: windows-x64
             os: windows-latest
             cc: cl
+            cmake_args: -A x64
           - name: windows-arm64
             os: windows-11-arm
             cc: cl
+            cmake_args: -A ARM64
           - name: linux-arm64
             os: ubuntu-24.04-arm
             cc: gcc
@@ -49,7 +52,7 @@ jobs:
         run: python tests/gen_bench.py
 
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_args }}
         env:
           CC: ${{ matrix.cc }}
 
@@ -68,18 +71,17 @@ jobs:
             tests/bench/photo_gray16.png \
             tests/bench/graphic_pal8.png \
             tests/bench/graphic_rgb8.png
-          if [ -x ./build/bench_zlibng ]; then
-            ./build/bench_zlibng ${{ matrix.name }} bench_${{ matrix.name }}_zng.json \
-              tests/bench/photo_rgb8.png \
-              tests/bench/photo_rgba8.png \
-              tests/bench/photo_gray8.png \
-              tests/bench/photo_gray16.png \
-              tests/bench/graphic_pal8.png \
-              tests/bench/graphic_rgb8.png
-          else
-            echo "zlib-ng reference unavailable on this platform, skipping"
-            echo "[]" > bench_${{ matrix.name }}_zng.json
-          fi
+          ./build/bench_zlibng ${{ matrix.name }} bench_${{ matrix.name }}_zng.json \
+            tests/bench/photo_rgb8.png \
+            tests/bench/photo_rgba8.png \
+            tests/bench/photo_gray8.png \
+            tests/bench/photo_gray16.png \
+            tests/bench/graphic_pal8.png \
+            tests/bench/graphic_rgb8.png
+        shell: bash
+
+      - name: Filter throughput (scalar and dispatched)
+        run: ./build/filters_test --bench | tee filters_${{ matrix.name }}.txt
         shell: bash
 
       - name: CPU feature report
@@ -92,6 +94,7 @@ jobs:
           path: |
             bench_${{ matrix.name }}.json
             bench_${{ matrix.name }}_zng.json
+            filters_${{ matrix.name }}.txt
 
   charts:
     name: update performance charts
@@ -130,5 +133,5 @@ jobs:
           benchmark-data-dir-path: bench/
           max-items-in-chart: 200
           alert-threshold: "120%"
-          comment-on-alert: true
+          comment-on-alert: false
           fail-on-alert: false

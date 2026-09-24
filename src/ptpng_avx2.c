@@ -8,15 +8,56 @@
 
 PTPNG_API_INLINE __m256i bcast_byte_avx2(__m256i v)
 {
-    return _mm256_set1_epi8((char)_mm256_extract_epi8(v, 31));
+    __m128i hi = _mm256_extracti128_si256(v, 1);
+    return _mm256_broadcastsi128_si256(_mm_shuffle_epi8(hi, _mm_set1_epi8(15)));
 }
+
+/* Each block receives the preceding bpp reconstructed bytes, repeated
+ * from lane zero. This also handles RGB pixels crossing register ends. */
+#define SUB_PREFIX(v, BPP)                                               \
+    (v) = _mm_add_epi8((v), _mm_slli_si128((v), (BPP)));                   \
+    (v) = _mm_add_epi8((v), _mm_slli_si128((v), (BPP) * 2));               \
+    (v) = _mm_add_epi8((v), _mm_slli_si128((v), (BPP) * 4));
+
+#define SUB_BLOCKS(BPP, ...)                                             \
+    {                                                                    \
+        const __m128i ctrl = _mm_setr_epi8(__VA_ARGS__);                   \
+        __m128i carry = _mm_setzero_si128();                              \
+        size_t i = 0;                                                    \
+        for (; i + 64 <= count; i += 64) {                               \
+            __m128i v0 = _mm_loadu_si128((const __m128i *)(src + i));     \
+            __m128i v1 = _mm_loadu_si128((const __m128i *)(src + i + 16));\
+            __m128i v2 = _mm_loadu_si128((const __m128i *)(src + i + 32));\
+            __m128i v3 = _mm_loadu_si128((const __m128i *)(src + i + 48));\
+            SUB_PREFIX(v0, BPP) SUB_PREFIX(v1, BPP)                      \
+            SUB_PREFIX(v2, BPP) SUB_PREFIX(v3, BPP)                      \
+            v0 = _mm_add_epi8(v0, carry);                                \
+            v1 = _mm_add_epi8(v1, _mm_shuffle_epi8(v0, ctrl));           \
+            v2 = _mm_add_epi8(v2, _mm_shuffle_epi8(v1, ctrl));           \
+            v3 = _mm_add_epi8(v3, _mm_shuffle_epi8(v2, ctrl));           \
+            carry = _mm_shuffle_epi8(v3, ctrl);                          \
+            _mm_storeu_si128((__m128i *)(dst + i), v0);                  \
+            _mm_storeu_si128((__m128i *)(dst + i + 16), v1);             \
+            _mm_storeu_si128((__m128i *)(dst + i + 32), v2);             \
+            _mm_storeu_si128((__m128i *)(dst + i + 48), v3);             \
+        }                                                                \
+        for (; i + 16 <= count; i += 16) {                               \
+            __m128i v = _mm_loadu_si128((const __m128i *)(src + i));      \
+            SUB_PREFIX(v, BPP)                                          \
+            v = _mm_add_epi8(v, carry);                                  \
+            carry = _mm_shuffle_epi8(v, ctrl);                           \
+            _mm_storeu_si128((__m128i *)(dst + i), v);                   \
+        }                                                                \
+        for (; i < count; i++)                                          \
+            dst[i] = (uint8_t)(src[i] + (i >= (BPP) ? dst[i - (BPP)] : 0));\
+        return;                                                          \
+    }
 
 void ptpng_filter_sub_avx2(uint8_t *dst, const uint8_t *src,
                            const uint8_t *prev, size_t count, unsigned bpp)
 {
     uint8_t *row = dst;
     (void)prev;
-    memmove(dst, src, count);
     if (bpp == 1) {
         /* note: _mm256_slli_si256 shifts per 128-bit lane, so the
          * in-register doubling yields two independent 16-byte prefixes;
@@ -25,10 +66,10 @@ void ptpng_filter_sub_avx2(uint8_t *dst, const uint8_t *src,
         size_t i = 0;
         uint8_t carry = 0;
         for (; i + 128 <= count; i += 128) {
-            __m256i v0 = _mm256_loadu_si256((const __m256i *)(row + i));
-            __m256i v1 = _mm256_loadu_si256((const __m256i *)(row + i + 32));
-            __m256i v2 = _mm256_loadu_si256((const __m256i *)(row + i + 64));
-            __m256i v3 = _mm256_loadu_si256((const __m256i *)(row + i + 96));
+            __m256i v0 = _mm256_loadu_si256((const __m256i *)(src + i));
+            __m256i v1 = _mm256_loadu_si256((const __m256i *)(src + i + 32));
+            __m256i v2 = _mm256_loadu_si256((const __m256i *)(src + i + 64));
+            __m256i v3 = _mm256_loadu_si256((const __m256i *)(src + i + 96));
 #define PREFIX16_256(v)                                                  \
             (v) = _mm256_add_epi8((v), _mm256_slli_si256((v), 1));       \
             (v) = _mm256_add_epi8((v), _mm256_slli_si256((v), 2));       \
@@ -62,17 +103,35 @@ void ptpng_filter_sub_avx2(uint8_t *dst, const uint8_t *src,
             _mm256_storeu_si256((__m256i *)(row + i + 64), v2);
             _mm256_storeu_si256((__m256i *)(row + i + 96), v3);
         }
+        for (; i + 16 <= count; i += 16) {
+            __m128i v = _mm_loadu_si128((const __m128i *)(src + i));
+            v = _mm_add_epi8(v, _mm_slli_si128(v, 1));
+            v = _mm_add_epi8(v, _mm_slli_si128(v, 2));
+            v = _mm_add_epi8(v, _mm_slli_si128(v, 4));
+            v = _mm_add_epi8(v, _mm_slli_si128(v, 8));
+            v = _mm_add_epi8(v, _mm_set1_epi8((char)carry));
+            carry = (uint8_t)_mm_extract_epi8(v, 15);
+            _mm_storeu_si128((__m128i *)(row + i), v);
+        }
         for (; i < count; i++) {
-            row[i] = (uint8_t)(row[i] + carry);
+            row[i] = (uint8_t)(src[i] + carry);
             carry = row[i];
         }
         return;
     }
 
-    /* bpp >= 2: blocked one-pass prefix sums (shared SSE2 kernel; the
-     * AVX2 lane structure gains nothing for strided carries) */
-    ptpng_sub_blocked_sse2(dst, count, bpp);
+    switch (bpp) {
+    case 2: SUB_BLOCKS(2, 14,15,14,15,14,15,14,15,14,15,14,15,14,15,14,15)
+    case 3: SUB_BLOCKS(3, 13,14,15,13,14,15,13,14,15,13,14,15,13,14,15,13)
+    case 4: SUB_BLOCKS(4, 12,13,14,15,12,13,14,15,12,13,14,15,12,13,14,15)
+    case 6: SUB_BLOCKS(6, 10,11,12,13,14,15,10,11,12,13,14,15,10,11,12,13)
+    case 8: SUB_BLOCKS(8, 8,9,10,11,12,13,14,15,8,9,10,11,12,13,14,15)
+    default: ptpng_filter_sub_scalar(dst, src, prev, count, bpp);
+    }
 }
+
+#undef SUB_BLOCKS
+#undef SUB_PREFIX
 
 void ptpng_filter_up_avx2(uint8_t *dst, const uint8_t *src,
                           const uint8_t *prev, size_t count, unsigned bpp)
@@ -223,7 +282,7 @@ static void rgba8_rgb16_avx2(const uint8_t *src, uint8_t *dst, uint32_t n,
                                         0, 0, 0, 0, 0, 0, 0, 0);
     uint32_t i = 0;
     (void)c;
-    for (; i + 2 <= n; i += 2) {
+    for (; i + 3 <= n; i += 2) {
         __m128i v = _mm_loadu_si128((const __m128i *)(src + i * 6));
         __m128i out = _mm_or_si128(_mm_shuffle_epi8(v, lo), alpha);
         _mm_storel_epi64((__m128i *)(dst + i * 4), out);

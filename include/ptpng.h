@@ -5,7 +5,8 @@
  * bit depths 1/2/4/8/16, Adam7 interlacing, tRNS, all standard ancillary
  * chunks).  Output is byte-compatible with libpng's png_read_image().
  *
- * Single header, no dependencies, C11.
+ * C11 library with no external runtime dependencies. Decode calls must
+ * be serialized across threads because dispatch and inflate tables are shared.
  */
 #ifndef PTPNG_H
 #define PTPNG_H

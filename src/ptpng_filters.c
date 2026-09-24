@@ -49,9 +49,8 @@ int ptpng_paeth_pred_ext(int a, int b, int c) { return paeth_pred(a, b, c); }
 #if PTPNG_X64
 static void sub_chains(uint8_t *dst, size_t count, unsigned bpp);
 
-#define SUB_BLOCK_BODY(BPP, CTRLINIT, STEPS)                               \
+#define SUB_BLOCK_BODY(BPP, BROADCAST, STEPS)                              \
     {                                                                      \
-        __m128i ctrl = CTRLINIT;                                           \
         size_t i = 0;                                                      \
         __m128i carry = _mm_setzero_si128();                               \
         for (; i + 64 <= count; i += 64) {                                 \
@@ -72,10 +71,10 @@ static void sub_chains(uint8_t *dst, size_t count, unsigned bpp);
             STEPS(v3, BPP * 2)                                             \
             STEPS(v3, BPP * 4)                                             \
             v0 = _mm_add_epi8(v0, carry);                                  \
-            v1 = _mm_add_epi8(v1, _mm_shuffle_epi8(v0, ctrl));             \
-            v2 = _mm_add_epi8(v2, _mm_shuffle_epi8(v1, ctrl));             \
-            v3 = _mm_add_epi8(v3, _mm_shuffle_epi8(v2, ctrl));             \
-            carry = _mm_shuffle_epi8(v3, ctrl);                            \
+            v1 = _mm_add_epi8(v1, BROADCAST(v0));                           \
+            v2 = _mm_add_epi8(v2, BROADCAST(v1));                           \
+            v3 = _mm_add_epi8(v3, BROADCAST(v2));                           \
+            carry = BROADCAST(v3);                                        \
             _mm_storeu_si128((__m128i *)(dst + i), v0);                    \
             _mm_storeu_si128((__m128i *)(dst + i + 16), v1);               \
             _mm_storeu_si128((__m128i *)(dst + i + 32), v2);               \
@@ -100,6 +99,12 @@ static void sub_chains(uint8_t *dst, size_t count, unsigned bpp);
     if (sh >= 16) {                                                        \
     } else SUB_STEP_ALL(v, sh)
 
+#define SUB_CARRY_2(v) _mm_shuffle_epi32(                                 \
+    _mm_shufflehi_epi16((v), _MM_SHUFFLE(3, 3, 3, 3)),                    \
+    _MM_SHUFFLE(3, 3, 3, 3))
+#define SUB_CARRY_4(v) _mm_shuffle_epi32((v), _MM_SHUFFLE(3, 3, 3, 3))
+#define SUB_CARRY_8(v) _mm_unpackhi_epi64((v), (v))
+
 void ptpng_sub_blocked_sse2(uint8_t *dst, size_t count, unsigned bpp)
 {
     /* the pixel-carry scheme is valid only when 16 % bpp == 0 (the
@@ -108,19 +113,13 @@ void ptpng_sub_blocked_sse2(uint8_t *dst, size_t count, unsigned bpp)
      * fast as the vector path). */
     switch (bpp) {
     case 2:
-        SUB_BLOCK_BODY(2, _mm_setr_epi8(14, 15, 14, 15, 14, 15, 14, 15,
-                                        14, 15, 14, 15, 14, 15, 14, 15),
-                       SUB_STEP_2)
+        SUB_BLOCK_BODY(2, SUB_CARRY_2, SUB_STEP_2)
         break;
     case 4: /* reach 12 -> steps 4,8 */
-        SUB_BLOCK_BODY(4, _mm_setr_epi8(12, 13, 14, 15, 12, 13, 14, 15,
-                                        12, 13, 14, 15, 12, 13, 14, 15),
-                       SUB_STEP_2)
+        SUB_BLOCK_BODY(4, SUB_CARRY_4, SUB_STEP_2)
         break;
     case 8: /* reach 8 -> step 8 */
-        SUB_BLOCK_BODY(8, _mm_setr_epi8(8, 9, 10, 11, 12, 13, 14, 15,
-                                        8, 9, 10, 11, 12, 13, 14, 15),
-                       SUB_STEP_2)
+        SUB_BLOCK_BODY(8, SUB_CARRY_8, SUB_STEP_2)
         break;
     case 3:
     case 6:
@@ -228,7 +227,6 @@ static void sub_doubling(uint8_t *dst, size_t count, unsigned bpp)
         ptpng_sub_blocked_sse2(dst, count, bpp);
         return;
     }
-#endif
     {
         size_t d;
         for (d = bpp; d < count; d <<= 1) {
@@ -239,16 +237,10 @@ static void sub_doubling(uint8_t *dst, size_t count, unsigned bpp)
                 dst[t] = (uint8_t)(dst[t] + dst[t - d]);
             }
             while (t >= 16 + d) {
-#if PTPNG_X64
                 __m128i v = _mm_loadu_si128((const __m128i *)(dst + t - 16));
                 __m128i s = _mm_loadu_si128((const __m128i *)(dst + t - 16 - d));
                 _mm_storeu_si128((__m128i *)(dst + t - 16),
                                  _mm_add_epi8(v, s)); /* byte-wise: no carries */
-#else
-                size_t k;
-                for (k = t - 16; k < t; k++)
-                    dst[k] = (uint8_t)(dst[k] + dst[k - d]);
-#endif
                 t -= 16;
             }
             while (t > d) {
@@ -257,6 +249,13 @@ static void sub_doubling(uint8_t *dst, size_t count, unsigned bpp)
             }
         }
     }
+#else
+    /* A scalar doubling block must not consume bytes updated in the same
+     * pass. Use the direct recurrence, which is linear and in-place safe. */
+    size_t i;
+    for (i = bpp; i < count; i++)
+        dst[i] = (uint8_t)(dst[i] + dst[i - bpp]);
+#endif
 }
 
 void ptpng_filter_sub_scalar(uint8_t *dst, const uint8_t *src,

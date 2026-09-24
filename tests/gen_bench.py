@@ -1,8 +1,9 @@
 """gen_bench.py - create large benchmark PNGs with realistic content."""
 from PIL import Image, ImageDraw
-import os, random, math
+import os, random
+from pathlib import Path
 
-OUT = r"tests\bench"
+OUT = Path(__file__).resolve().parent / "bench"
 os.makedirs(OUT, exist_ok=True)
 rng = random.Random(7)
 
@@ -38,13 +39,13 @@ def flat_graphic(w, h):
     return img
 
 W, H = 3200, 2400
-photo_rgb(W, H).save(f"{OUT}\\photo_rgb8.png", optimize=False)
-photo_rgba(W, H).save(f"{OUT}\\photo_rgba8.png", optimize=False)
-photo_rgb(W, H).convert("L").save(f"{OUT}\\photo_gray8.png", optimize=False)
-flat_graphic(W, H).save(f"{OUT}\\graphic_rgb8.png", optimize=False)
+photo_rgb(W, H).save(OUT / "photo_rgb8.png", optimize=False)
+photo_rgba(W, H).save(OUT / "photo_rgba8.png", optimize=False)
+photo_rgb(W, H).convert("L").save(OUT / "photo_gray8.png", optimize=False)
+flat_graphic(W, H).save(OUT / "graphic_rgb8.png", optimize=False)
 flat_graphic(W, H).convert("P", palette=Image.ADAPTIVE, colors=256).save(
-    f"{OUT}\\graphic_pal8.png", optimize=False)
-photo_rgb(W, H).convert("I;16").save(f"{OUT}\\photo_gray16.png", optimize=False)
+    OUT / "graphic_pal8.png", optimize=False)
+photo_rgb(W, H).convert("I;16").save(OUT / "photo_gray16.png", optimize=False)
 print("sizes:")
 for f in sorted(os.listdir(OUT)):
     print(" ", f, os.path.getsize(os.path.join(OUT, f)))

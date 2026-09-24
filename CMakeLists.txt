@@ -6,14 +6,24 @@ option(PTPNG_BUILD_BENCH "Build bench_compare (nightly perf tracking)" ON)
 option(PTPNG_WITH_ZLIB_NG "Also build libpng+zlib-ng reference for benchmarks" ON)
 
 set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+# Keep CLI paths identical for single- and multi-configuration generators.
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<0:>")
 
 # ---- the library -------------------------------------------------------
 set(PTPNG_SOURCES src/ptpng.c src/ptpng_inflate.c src/ptpng_crc.c
                   src/ptpng_filters.c)
 
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64)|(AMD64)|(i.86)|(X86)")
+set(PTPNG_PROCESSOR "${CMAKE_SYSTEM_PROCESSOR}")
+if(CMAKE_GENERATOR_PLATFORM)
+    set(PTPNG_PROCESSOR "${CMAKE_GENERATOR_PLATFORM}")
+elseif(APPLE AND CMAKE_OSX_ARCHITECTURES)
+    set(PTPNG_PROCESSOR "${CMAKE_OSX_ARCHITECTURES}")
+endif()
+string(TOLOWER "${PTPNG_PROCESSOR}" PTPNG_PROCESSOR)
+if(PTPNG_PROCESSOR MATCHES "^(x86_64|amd64|x64|i.86|x86|win32)$")
     set(PTPNG_X86 ON)
-elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "(aarch64)|(ARM64)|(arm)")
+elseif(PTPNG_PROCESSOR MATCHES "^(aarch64|arm64|arm.*)$")
     set(PTPNG_ARM ON)
 endif()
 
@@ -38,36 +48,54 @@ elseif(PTPNG_ARM)
 endif()
 
 if(MSVC)
-    target_compile_options(ptpng PRIVATE /W3 /O2 /MT /DNDEBUG
+    target_compile_options(ptpng PRIVATE /W3
                                          /D_CRT_SECURE_NO_WARNINGS)
 else()
-    target_compile_options(ptpng PRIVATE -O2 -Wall -Wextra
+    target_compile_options(ptpng PRIVATE -Wall -Wextra
                               -Wno-unused-parameter -fno-strict-aliasing)
 endif()
 
 # ---- the CLI tool and unit testers -------------------------------------
-set(PTPNG_TOOLS ptpng_tool filters_test sums_test inflate_test fuzz_png)
-foreach(tgt ptpng_tool filters_test sums_test inflate_test fuzz_png)
+set(PTPNG_TOOLS ptpng_tool filters_test sums_test inflate_test fuzz_png decoder_test)
+foreach(tgt ${PTPNG_TOOLS})
     add_executable(${tgt} tools/${tgt}.c)
     target_link_libraries(${tgt} PRIVATE ptpng)
 endforeach()
 if(MSVC)
     foreach(tgt ${PTPNG_TOOLS})
         target_compile_options(${tgt} PRIVATE
-                               /W3 /O2 /MT /D_CRT_SECURE_NO_WARNINGS)
+                               /W3 /D_CRT_SECURE_NO_WARNINGS)
     endforeach()
 else()
     foreach(tgt ${PTPNG_TOOLS})
-        target_compile_options(${tgt} PRIVATE -O2 -w)
+        target_compile_options(${tgt} PRIVATE -Wall -Wextra)
     endforeach()
 endif()
 
 enable_testing()
 add_test(NAME unit COMMAND filters_test)
 add_test(NAME sums COMMAND sums_test)
+add_test(NAME decoder COMMAND decoder_test)
 
 # ---- reference build (zlib + libpng) and parity/bench tools ------------
 if(PTPNG_WITH_LIBPNG)
+    # Configure reference libraries for the same compiler and target as ptpng.
+    set(PTPNG_REFERENCE_ARGS -G "${CMAKE_GENERATOR}"
+        "-DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}"
+        -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_LIBDIR=lib)
+    if(CMAKE_GENERATOR_PLATFORM)
+        list(APPEND PTPNG_REFERENCE_ARGS -A "${CMAKE_GENERATOR_PLATFORM}")
+    endif()
+    if(CMAKE_GENERATOR_TOOLSET)
+        list(APPEND PTPNG_REFERENCE_ARGS -T "${CMAKE_GENERATOR_TOOLSET}")
+    endif()
+    foreach(var CMAKE_TOOLCHAIN_FILE CMAKE_OSX_ARCHITECTURES
+                CMAKE_OSX_DEPLOYMENT_TARGET CMAKE_OSX_SYSROOT
+                CMAKE_C_COMPILER_TARGET CMAKE_SYSROOT CMAKE_MSVC_RUNTIME_LIBRARY)
+        if(DEFINED ${var})
+            list(APPEND PTPNG_REFERENCE_ARGS "-D${var}=${${var}}")
+        endif()
+    endforeach()
     set(PTPNG_ZLIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/zlib-develop)
     set(PTPNG_LIBPNG_DIR
         ${CMAKE_CURRENT_SOURCE_DIR}/third_party/libpng-libpng16)
@@ -78,8 +106,9 @@ if(PTPNG_WITH_LIBPNG)
     file(MAKE_DIRECTORY ${ZBUILD})
     execute_process(
         COMMAND ${CMAKE_COMMAND} ${PTPNG_ZLIB_DIR}
-                -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release
-                ${PTPNG_MSBUILD_EXTRA}
+                ${PTPNG_REFERENCE_ARGS}
+                -DZLIB_BUILD_SHARED=OFF -DZLIB_BUILD_STATIC=ON
+                -DZLIB_BUILD_TESTING=OFF
                 -DCMAKE_INSTALL_PREFIX=${ZBUILD}/inst
         WORKING_DIRECTORY ${ZBUILD} RESULT_VARIABLE rz)
     if(rz EQUAL 0)
@@ -125,7 +154,7 @@ if(PTPNG_WITH_LIBPNG)
     set(PNG_FRAMEWORK OFF CACHE BOOL "" FORCE)
     add_subdirectory(${PTPNG_LIBPNG_DIR} libpngb)
 
-    # ptpng itself is /MT; the reference tools link /MD to match libpng
+    # All targets inherit the same MSVC runtime selection.
     set(PTPNG_REF_TOOLS verify_suite)
     if(PTPNG_BUILD_BENCH)
         list(APPEND PTPNG_REF_TOOLS bench_compare)
@@ -137,11 +166,9 @@ if(PTPNG_WITH_LIBPNG)
         target_link_libraries(${tgt} PRIVATE ptpng png_static)
         if(MSVC)
             target_compile_options(${tgt} PRIVATE
-                                   /W3 /O2 /D_CRT_SECURE_NO_WARNINGS)
-            set_target_properties(${tgt} PROPERTIES
-                                  MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+                                   /W3 /D_CRT_SECURE_NO_WARNINGS)
         else()
-            target_compile_options(${tgt} PRIVATE -O2 -w)
+            target_compile_options(${tgt} PRIVATE -Wall -Wextra)
         endif()
     endforeach()
 
@@ -156,9 +183,7 @@ if(PTPNG_WITH_LIBPNG)
         target_link_libraries(libpng_bench PRIVATE png_static)
         if(MSVC)
             target_compile_options(libpng_bench PRIVATE
-                                   /W3 /O2 /D_CRT_SECURE_NO_WARNINGS)
-            set_target_properties(libpng_bench PROPERTIES
-                                  MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+                                   /W3 /D_CRT_SECURE_NO_WARNINGS)
         endif()
     endif()
 
@@ -166,15 +191,16 @@ if(PTPNG_WITH_LIBPNG)
     # zlib-ng in ZLIB_COMPAT mode exposes the same symbols as zlib, so
     # it cannot coexist with the stock-zlib libpng in one binary.  It
     # gets its own configure-time build tree and its own bench binary.
-    if(PTPNG_WITH_ZLIB_NG AND PTPNG_BUILD_BENCH AND
-       EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/zlib-ng-2.2.4/CMakeLists.txt)
+    if(PTPNG_WITH_ZLIB_NG AND PTPNG_BUILD_BENCH)
         set(ZNG ${CMAKE_BINARY_DIR}/zngb)
         set(PTPNG_ZNG_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/zlib-ng-2.2.4)
         file(MAKE_DIRECTORY ${ZNG})
         execute_process(
             COMMAND ${CMAKE_COMMAND} ${PTPNG_ZNG_DIR}
+                    ${PTPNG_REFERENCE_ARGS}
                     -DZLIB_COMPAT=ON -DBUILD_SHARED_LIBS=OFF
-                    -DWITH_GTEST=OFF -DWITH_FUZZERS=OFF -DWITH_BENCHMARKS=OFF
+                    -DZLIB_ENABLE_TESTS=OFF -DWITH_GTEST=OFF
+                    -DWITH_FUZZERS=OFF -DWITH_BENCHMARKS=OFF
                     -DWITH_MAINTAINER_WARNINGS=OFF -DWITH_SANITIZER=OFF
                     -DCMAKE_BUILD_TYPE=Release
                     -DCMAKE_INSTALL_PREFIX=${ZNG}/inst
@@ -186,20 +212,18 @@ if(PTPNG_WITH_LIBPNG)
                 WORKING_DIRECTORY ${ZNG} RESULT_VARIABLE rz2)
         endif()
         if(NOT rz2 EQUAL 0)
-            message(WARNING "zlib-ng reference build failed; skipping")
-            set(PTNG_SKIP ON)
+            message(FATAL_ERROR "zlib-ng reference build failed")
         else()
             file(GLOB PTPNG_ZNG_ALL "${ZNG}/inst/lib/*")
             set(PTPNG_ZNG_LIB "")
             foreach(cand ${PTPNG_ZNG_ALL})
                 get_filename_component(nm "${cand}" NAME)
-                if(nm MATCHES "static|libzs|^libz\\.a$|ng|compat")
+                if(nm MATCHES "^(zlibstatic\\.lib|libzs\\.lib|zlib\\.lib|libz\\.a)$")
                     set(PTPNG_ZNG_LIB "${cand}")
                 endif()
             endforeach()
             if(NOT PTPNG_ZNG_LIB)
-                message(WARNING "zlib-ng static library not found; skipping")
-                set(PTNG_SKIP ON)
+                message(FATAL_ERROR "zlib-ng static library not found")
             else()
                 message(STATUS "reference zlib-ng: ${PTPNG_ZNG_LIB}")
 
@@ -208,6 +232,7 @@ if(PTPNG_WITH_LIBPNG)
                 file(MAKE_DIRECTORY ${PNGB})
                 execute_process(
                     COMMAND ${CMAKE_COMMAND} ${PTPNG_LIBPNG_DIR}
+                            ${PTPNG_REFERENCE_ARGS}
                             -DPNG_SHARED=OFF -DPNG_STATIC=ON -DPNG_TESTS=OFF
                             -DPNG_TOOLS=OFF -DPNG_FRAMEWORK=OFF
                             -DCMAKE_BUILD_TYPE=Release
@@ -221,8 +246,7 @@ if(PTPNG_WITH_LIBPNG)
                         WORKING_DIRECTORY ${PNGB} RESULT_VARIABLE rp2)
                 endif()
                 if(NOT rp2 EQUAL 0)
-                    message(WARNING "libpng+zlib-ng build failed; skipping")
-                    set(PTNG_SKIP ON)
+                    message(FATAL_ERROR "libpng+zlib-ng build failed")
                 else()
                     # locate the built static libpng (multi- and single-config)
                     file(GLOB PNGNG_CAND "${PNGB}/*.lib" "${PNGB}/Release/*.lib"
@@ -235,25 +259,25 @@ if(PTPNG_WITH_LIBPNG)
                         endif()
                     endforeach()
                     if(NOT PNGNG_LIB)
-                        message(WARNING "libpng(zng) static lib not found")
-                        set(PTNG_SKIP ON)
+                        message(FATAL_ERROR "libpng(zng) static lib not found")
                     else()
                         message(STATUS "reference libpng(zlib-ng): ${PNGNG_LIB}")
                         add_executable(bench_zlibng tools/bench_compare.c)
                         target_compile_definitions(bench_zlibng PRIVATE
                                                    REF_LABEL="libpng-zng")
                         target_include_directories(bench_zlibng PRIVATE
-                                   ${PTPNG_LIBPNG_DIR} ${ZNG} ${PNGB})
+                                   ${PTPNG_LIBPNG_DIR} ${ZNG}/inst/include ${PNGB})
                         target_link_libraries(bench_zlibng PRIVATE
                                               ptpng ${PNGNG_LIB}
                                               ${PTPNG_ZNG_LIB})
+                        if(UNIX)
+                            target_link_libraries(bench_zlibng PRIVATE m)
+                        endif()
                         if(MSVC)
                             target_compile_options(bench_zlibng PRIVATE
-                                   /W3 /O2 /D_CRT_SECURE_NO_WARNINGS)
-                            set_target_properties(bench_zlibng PROPERTIES
-                                  MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+                                   /W3 /D_CRT_SECURE_NO_WARNINGS)
                         else()
-                            target_compile_options(bench_zlibng PRIVATE -O2 -w)
+                            target_compile_options(bench_zlibng PRIVATE -Wall -Wextra)
                         endif()
                     endif()
                 endif()

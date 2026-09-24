@@ -92,6 +92,7 @@ static int ref_decode(const uint8_t *data, size_t size, int fmt,
         if (fmt == 2)
             png_set_strip_alpha(png);
     }
+    png_set_interlace_handling(png);
     png_read_update_info(png, info);
     rb = png_get_rowbytes(png, info);
     height = *h;
