@@ -67,6 +67,18 @@
       .header-label {
         margin-right: 4px;
       }
+      .benchmark-nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 16px;
+        margin: 16px 0;
+      }
+      .benchmark-nav a {
+        padding: 8px 12px;
+        background-color: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 6px;
+      }
       .benchmark-set {
         margin: 8px 0;
         width: 100%;
@@ -110,11 +122,14 @@
         <a id="repository-link" rel="noopener"></a>
       </div>
     </header>
+    <nav id="benchmark-nav" class="benchmark-nav" aria-label="Benchmark sections"></nav>
     <p>Hosted runners can change between runs. Start with the within-run speed ratios below;
       1× means equal throughput. Ratios reduce machine variation but do not replace paired
       old/new tests on one machine. Expand raw results for absolute throughput and encoding
       time/size. The memory-copy measurement is a reference, not a theoretical PNG ceiling.
       New results include runner details in their tooltips and downloadable data.</p>
+    <p>Decoder points from <code>e6f083c</code> onward use medians of 12 alternating
+      rounds; earlier points used best-of-12 timings.</p>
     <main id="main"></main>
     <footer>
       <button id="dl-button">Download data as JSON</button>
@@ -307,24 +322,41 @@
             for (const [benchName, benches] of benchSet.entries()) {
               renderGraph(graphsElem, benchName, benches)
             }
+            return setElem;
           }
 
           const main = document.getElementById('main');
-          for (const {name, dataSet, raw} of dataSets) {
+          const navigation = document.getElementById('benchmark-nav');
+          for (const [index, {name, dataSet, raw}] of dataSets.entries()) {
+            const link = document.createElement('a');
+            link.href = '#benchmark-' + index;
+            link.textContent = !raw ? 'Decoder speed ratios' :
+              name === 'PNG encoding time and size (nightly)' ? 'Encoder time and file size' :
+              name === 'ptpng vs libpng (nightly)' ? 'Raw decoder throughput' : name;
+            navigation.appendChild(link);
+            let target;
             if (raw) {
               const details = document.createElement('details');
+              target = details;
               const summary = document.createElement('summary');
               summary.textContent = 'Raw results: ' + name;
               details.appendChild(summary);
               main.appendChild(details);
               // Build charts only when visible so canvas dimensions are correct.
-              details.addEventListener('toggle', () => {
+              const renderRaw = () => {
                 if (details.open && !details.dataset.rendered) {
                   renderBenchSet(name, dataSet, details);
                   details.dataset.rendered = 'true';
                 }
-              });
-            } else renderBenchSet(name, dataSet, main);
+              };
+              details.addEventListener('toggle', renderRaw);
+              link.onclick = () => {
+                details.open = true;
+                // Render before the anchor jumps, so its position is final.
+                renderRaw();
+              };
+            } else target = renderBenchSet(name, dataSet, main);
+            target.id = 'benchmark-' + index;
           }
         }
 
