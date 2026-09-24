@@ -253,3 +253,77 @@ four-byte kernel, unaligned and overlapping rows, and exact input
 allocations. Match-copy tests cover every distance from 1 to 64 and
 length from 3 to 258, with and without following literals: 32,768 cases.
 Each case also checks insufficient capacity and its output boundary.
+
+## First encoder release
+
+Commit `e6f083c` adds encoding for gray, gray+alpha, RGB and RGBA at 8 or
+16 bits. Output is non-interlaced and contains no ancillary metadata.
+AVX2 filters handle 32 bytes per iteration; NEON handles 16. Adaptive
+filtering scores up to 192 sampled bytes per row and runs the selected
+filter once over the full row. The compressor uses a 32 KiB hash table,
+bounded LZ77 search and fixed Huffman codes. If that stream exceeds the
+stored-block bound, it emits stored blocks instead. No runtime dependency
+was added. Format references are the [PNG specification](https://www.w3.org/TR/png-3/)
+and [DEFLATE specification](https://www.rfc-editor.org/rfc/rfc1951).
+
+Local Windows x64, i7-1355U, Release MSVC build. These are two generated
+3200x2400 photo-like images, not a real-world photo corpus. Each encoder
+ran once for warm-up and pixel verification, then five times with order
+rotated each round. The table uses median elapsed times. Allocation,
+filtering, compression and checksums are timed; freeing the returned PNG
+is excluded for every encoder. Runs were pinned to P logical CPU 2 and
+E logical CPU 4. System load and frequency were not fixed, so compare
+encoders within each run rather than absolute P/E times.
+
+| Image | Core | ptpng | libpng+zlib-ng level 1 | Speedup | ptpng bytes / reference bytes |
+| --- | --- | ---: | ---: | ---: | ---: |
+| photo_rgb8 | P | 243.36 ms | 841.58 ms | 3.46x | 9,739,624 / 10,136,572 |
+| photo_rgb8 | E | 264.24 ms | 1,018.55 ms | 3.85x | 9,739,624 / 10,136,572 |
+| photo_rgba8 | P | 532.10 ms | 1,393.55 ms | 2.62x | 19,392,753 / 19,251,365 |
+| photo_rgba8 | E | 501.43 ms | 1,195.84 ms | 2.38x | 19,392,753 / 19,251,365 |
+
+The RGB file is 3.9% smaller than the zlib-ng level-1 reference; RGBA is
+0.7% larger. Against stronger compression, the tradeoff changes: zlib-ng
+level 6 produced 5,350,341 RGB bytes and 11,637,017 RGBA bytes, making our
+output 82% and 67% larger. Stock-zlib level 1 produced 7,116,353 RGB bytes;
+our P-core encode was 5.37x faster but 37% larger. This release is a fast
+compression mode, with no claim to lead all encoders or all images.
+
+Reproduce the stronger-reference comparison on Windows:
+
+```powershell
+./build/bench_encode_zlibng --cpu 2 local-p encode_p.json tests/bench/photo_rgb8.png tests/bench/photo_rgba8.png
+./build/bench_encode_zlibng --cpu 4 local-e encode_e.json tests/bench/photo_rgb8.png tests/bench/photo_rgba8.png
+```
+
+Tests add 2,307 complete PNG round trips, independently read by libpng,
+and 1,496 raw compression streams, independently inflated by zlib in
+reference builds. Filters are compared with scalar reference predictors
+across alignments, exact buffer ends and every Paeth input triple. All
+seven platform/sanitizer CI jobs passed for `e6f083c`. Further compression
+work should compare specialized encoders and a wider image corpus, while
+reporting file size alongside speed.
+
+## Reading the nightly graphs
+
+[GitHub-hosted jobs use fresh virtual machines](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+The workflow does not guarantee an identical physical CPU or load between
+runs. Between `77cbb8b` and `28971d9`, Linux RGB decode throughput changed
+from 242.00 to 189.40 MPix/s, while unchanged libpng changed from 149.60 to
+107.35. Within-run speedup changed from 1.62x to 1.76x. The shared slowdown
+suggests runner variation; those records lack CPU model information and
+cannot establish its exact cause.
+
+The dark chart page now derives same-run ratios for historical decoder
+points. From `e6f083c`, artifacts also record CPU, OS and runner image.
+Decoder timing changes to medians of 12 alternating rounds after warm-up;
+older points used separate best-of-12 samples. This method change is
+visible on the page and in new data tooltips. Encoder charts report both
+time and bytes against libpng levels 1 and 6, using zlib and zlib-ng.
+
+A warm-buffer 64 MiB memory-copy benchmark provides throughput context.
+Its 128 MiB working set may interact differently with each CPU's cache.
+It reports payload MB/s, not aggregate read/write traffic. This is a
+measured reference rather than a theoretical PNG limit: decoding reads
+compressed data, writes raw pixels, and performs input-dependent work.
+Kernel throughput and complete-image throughput answer different questions.

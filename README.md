@@ -144,9 +144,14 @@ and a measured memory-copy reference. GitHub-hosted jobs use fresh virtual
 machines, so absolute throughput is not directly comparable across runs.
 New benchmark artifacts record the CPU, OS and runner image. Ratios help
 control that variation; they do not replace alternating old/new tests on
-the same machine. The memory-copy reference is not a theoretical PNG
+the same machine. Decoder measurements from the encoder release onward
+use medians of 12 alternating rounds after warm-up; older chart points
+used the best of 12 separate runs. The tooltip records this change.
+The memory-copy reference is not a theoretical PNG
 limit, since compression, filtering, checksums and pixel layout change
-the work required.
+the work required. Its tooltip gives RGB8 and RGBA8 pixel equivalents by
+dividing payload MB/s by three and four. Copying reads and writes an entire
+raw image; a decoder reads compressed input, so this is not a strict bound.
 
 ## Design: where the speed comes from
 

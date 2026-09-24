@@ -245,11 +245,13 @@ int main(int argc, char **argv)
     {
         double bandwidth = bench_memory_copy();
         if (bandwidth <= 0) { fclose(js); return 1; }
-        printf("warm 64 MiB memcpy: %.2f MB/s payload (reference, not a PNG ceiling)\n", bandwidth);
+        printf("warm 64 MiB memcpy: %.2f MB/s payload, %.2f MPix/s RGBA8-equivalent "
+               "(reference, not a PNG ceiling)\n", bandwidth, bandwidth/4);
         fprintf(js, "{\"name\":\"%s/memory-copy-vs-" REF_LABEL "/64MiB\","
                     "\"unit\":\"MB/s\",\"value\":%.2f,\"extra\":\"Warm buffers; 128 MiB working set; "
-                    "median of five batches; payload bytes only; measured reference, not a theoretical limit\"},\n",
-                    tag, bandwidth);
+                    "median of five batches; payload bytes only; %.2f MPix/s RGB8-equivalent, "
+                    "%.2f MPix/s RGBA8-equivalent; measured reference, not a theoretical limit\"},\n",
+                    tag, bandwidth, bandwidth/3, bandwidth/4);
     }
     for (i = 3; i < argc; i++) {
         size_t size;
