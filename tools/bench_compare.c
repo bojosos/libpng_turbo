@@ -16,6 +16,10 @@
 #include "ptpng.h"
 #include "png.h"
 
+#ifndef REF_LABEL
+#define REF_LABEL "libpng" /* stock zlib; bench_zlibng defines its own */
+#endif
+
 static double now_sec(void)
 {
 #ifdef _WIN32
@@ -193,8 +197,8 @@ int main(int argc, char **argv)
         tpt_r = bench_ptpng(data, size, PTPNG_OUT_RGBA8, iters, &pt_len);
         tlp_r = bench_libpng(data, size, 1, iters, &lp_len);
 
-        printf("%-18s native: ptpng %7.2f MB/s  libpng %7.2f MB/s  (%.2fx)"
-               "   rgba8: ptpng %7.2f  libpng %7.2f  (%.2fx)\n",
+        printf("%-18s [" REF_LABEL "] native: ptpng %7.2f MB/s  ref %7.2f MB/s (%.2fx)"
+               "   rgba8: ptpng %7.2f   ref %7.2f  (%.2fx)\n",
                nm,
                pixels / tpt_n / 1e6, pixels / tlp_n / 1e6,
                tlp_n / tpt_n,

@@ -59,15 +59,27 @@ jobs:
       - name: Correctness first (a fast benchmark is worthless if wrong)
         run: ctest --test-dir build -C Release --output-on-failure
 
-      - name: Benchmark vs libpng
-        run: >
-          ./build/bench_compare ${{ matrix.name }} bench_${{ matrix.name }}.json
-          tests/bench/photo_rgb8.png
-          tests/bench/photo_rgba8.png
-          tests/bench/photo_gray8.png
-          tests/bench/photo_gray16.png
-          tests/bench/graphic_pal8.png
-          tests/bench/graphic_rgb8.png
+      - name: Benchmark vs libpng (zlib) and libpng (zlib-ng)
+        run: |
+          ./build/bench_compare ${{ matrix.name }} bench_${{ matrix.name }}.json \
+            tests/bench/photo_rgb8.png \
+            tests/bench/photo_rgba8.png \
+            tests/bench/photo_gray8.png \
+            tests/bench/photo_gray16.png \
+            tests/bench/graphic_pal8.png \
+            tests/bench/graphic_rgb8.png
+          if [ -x ./build/bench_zlibng ]; then
+            ./build/bench_zlibng ${{ matrix.name }} bench_${{ matrix.name }}_zng.json \
+              tests/bench/photo_rgb8.png \
+              tests/bench/photo_rgba8.png \
+              tests/bench/photo_gray8.png \
+              tests/bench/photo_gray16.png \
+              tests/bench/graphic_pal8.png \
+              tests/bench/graphic_rgb8.png
+          else
+            echo "zlib-ng reference unavailable on this platform, skipping"
+            echo "[]" > bench_${{ matrix.name }}_zng.json
+          fi
         shell: bash
 
       - name: CPU feature report
@@ -77,7 +89,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: bench-${{ matrix.name }}
-          path: bench_${{ matrix.name }}.json
+          path: |
+            bench_${{ matrix.name }}.json
+            bench_${{ matrix.name }}_zng.json
 
   charts:
     name: update performance charts
@@ -101,6 +115,9 @@ jobs:
           json.dump(merged, open('bench.json', 'w'), indent=1)
           print(f"merged {len(merged)} benchmark entries")
           EOF
+
+      - name: Verify zlib-ng results have distinct series names
+        run: python3 -c "import json; d=json.load(open('bench.json')); names=set(e['name'] for e in d); assert any('libpng-zng' in n for n in names), names; print(len(names), 'series')"
 
       - uses: benchmark-action/github-action-benchmark@v1
         with:

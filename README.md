@@ -23,6 +23,26 @@ synthetic match-heavy case (`graphic_rgb8`) libpng's fused
 filler transform edges ahead by a few percent because ptpng converts
 in a separate pass over the pixel data.
 
+### vs libpng + zlib-ng
+
+The nightly benchmark also runs against **libpng linked with
+zlib-ng 2.2.4** (ZLIB_COMPAT), the strongest single-threaded
+zlib-based reference. zlib-ng's faster inflate closes much of the
+gap plain zlib leaves, but ptpng still wins native decode on every
+image (i7-1355U, best-of-12):
+
+| image          | ptpng    | libpng+zlib-ng | speedup |
+|----------------|----------|----------------|---------|
+| graphic_pal8   | 2163 MB/s| 944 MB/s       | **2.3x**|
+| photo_rgba8    | 89 MB/s  | 60 MB/s        | **1.5x**|
+| photo_gray16   | 245 MB/s | 187 MB/s       | **1.3x**|
+| photo_rgb8     | 258 MB/s | 206 MB/s       | **1.25x**|
+| photo_gray8    | 323 MB/s | 281 MB/s       | **1.15x**|
+| graphic_rgb8   | 430 MB/s | 405 MB/s       | 1.06x   |
+
+RGBA8 mode: ptpng wins 4 of 6; libpng+zlib-ng's fused transforms edge
+ahead on `photo_rgba8` (0.84x) and `graphic_rgb8` (0.94x).
+
 ## Building (MSVC x64)
 
     build.bat
@@ -30,6 +50,17 @@ in a separate pass over the pixel data.
 Produces `build\ptpng_tool.exe` plus the test executables. The library
 itself is `src/*.c` + `include/ptpng.h`; `src/ptpng_avx2.c` must be
 compiled with `/arch:AVX2` (runtime-dispatched, SSE2 is the baseline).
+
+## Building everywhere (CMake)
+
+    cmake -S . -B build && cmake --build build --config Release && ctest --test-dir build -C Release
+
+Builds the library, tools, the vendored zlib + libpng references
+(byte-parity suite), and — when `third_party/zlib-ng-*` is present —
+`bench_zlibng` against libpng with zlib-ng. Options:
+`-DPTPNG_WITH_LIBPNG=OFF` (no references, sanitizer builds),
+`-DPTPNG_WITH_ZLIB_NG=OFF`. AVX2/NEON translation units are selected
+per-architecture with runtime CPU dispatch on top.
 
 ## API
 
@@ -112,7 +143,22 @@ To rebuild libpng+zlib references: see `build.bat` comments in
 
 - `build\ptpng_tool file.png [--native|--rgba8|--rgb8] [-o out.raw]
   [--info] [--bench N] [--noverify]` - decode/verify/benchmark CLI.
-- `build\libpng_bench.exe` - same via libpng (reference).
+- `build\libpng_bench.exe` - same via libpng (reference, Windows).
+- `bench_compare` / `bench_zlibng` - portable ptpng vs libpng(zlib) /
+  libpng(zlib-ng) benchmarks with github-action-benchmark JSON output.
+- `verify_suite` - portable whole-corpus byte-parity runner vs libpng.
 - `build\inflate_test.exe a.z a.raw len` - inflate unit tester.
 - `build\filters_test.exe`, `build\sums_test.exe` - kernel testers.
 - `build\pmp.exe file.png [iters]` - poor-man's sampling profiler.
+
+## CI / nightly performance
+
+`.github/workflows/ci.yml` runs on every push: unit + parity tests and
+a fuzz smoke on linux-x64 (gcc + clang, plus ASan+UBSan job), macOS
+ARM64, Windows x64, Windows ARM64 and Linux ARM64.
+
+`.github/workflows/nightly.yml` runs nightly: the full test matrix,
+then benchmarks ptpng vs **libpng+zlib** and **libpng+zlib-ng** on
+every platform, and pushes the accumulated results to the `gh-pages`
+branch where github-action-benchmark renders per-platform time series
+(each series labeled with the runner's detected CPU features).
