@@ -7,6 +7,10 @@ on:
         description: Optional full 40-character baseline commit SHA (must include profile_png)
         required: false
         default: ''
+      compare_only:
+        description: Skip sampling and run only paired timings against the baseline
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -57,6 +61,7 @@ jobs:
           cmake --build build_profile --parallel 2
           ctest --test-dir build_profile --output-on-failure
       - name: Collect process-scoped profiles and reports
+        if: inputs.compare_only != true
         shell: bash
         run: bash tools/profile_linux.sh build_profile profile-results 5
       - name: Build baseline and compare on the same CPU
@@ -65,6 +70,7 @@ jobs:
           cmake -S profile-baseline -B build_profile_baseline -DCMAKE_BUILD_TYPE=Release -DPTPNG_WITH_LIBPNG=OFF '-DCMAKE_C_FLAGS_RELEASE=-O3 -g -DNDEBUG -fno-omit-frame-pointer'
           cmake --build build_profile_baseline --target profile_png --parallel 2
           git -C profile-baseline rev-parse HEAD > profile-results/baseline-revision.txt
+          python tools/bench_metadata.py profile-results/machine.json
           python tools/compare_profiles.py build_profile_baseline/profile_png build_profile/profile_png profile-results
       - uses: actions/upload-artifact@v4
         if: always()

@@ -232,7 +232,12 @@ static int deflate_fixed(const uint8_t *src, size_t size,
         next = pos + (size - pos < 1 + (misses >> 6) ?
                       size - pos : 1 + (misses >> 6));
 #if PTPNG_X64
+        /* Keep ordinary short literal runs on the compiler's hot path. */
+#if defined(__GNUC__) || defined(__clang__)
+        if (__builtin_expect(next - pos >= 8, 0)) {
+#else
         if (next - pos >= 8) {
+#endif
             if (!deflate_literal_run(w, src + pos, next - pos, literals))
                 return 0;
             pos = next;
