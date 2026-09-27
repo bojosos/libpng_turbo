@@ -85,17 +85,20 @@ fi
 printf 'Counters available: `%s`. Each profile includes input loading and one validated warm-up before the timed loop. Timed throughput includes output allocation/free and checksum verification.\n\n' "${events[*]:-none}" >> "$summary"
 printf '| Workload | Timed output |\n|---|---|\n' >> "$summary"
 
-# Both eight-bit photos, flat graphics, 16-bit Paeth and RGB conversion.
+# Photos, flat graphics, 16-bit Paeth, literal-heavy noise and palette expansion.
 workloads=(
     'decode photo_rgb8 native'
     'decode photo_rgb8 rgb8'
     'decode photo_rgba8 native'
     'decode graphic_rgb8 native'
     'decode photo_rgba16_paeth native'
+    'decode noise_rgba8 native'
+    'decode graphic_pal8 rgb8'
     'encode photo_rgb8 native'
     'encode photo_rgba8 native'
     'encode graphic_rgb8 native'
     'encode photo_rgba16_paeth native'
+    'encode noise_rgba8 native'
 )
 for workload in "${workloads[@]}"; do
     read -r operation image format <<< "$workload"
