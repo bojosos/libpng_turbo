@@ -588,3 +588,13 @@ still 1.057x faster. Linux/Windows ARM64 noise encoding remained 1.378x/1.704x.
 This final choice gives up some Windows RGBA8 photo gain to remove the flat-image
 regression. All platform CI checks and the push-triggered sanitizer fuzzing
 passed after this adjustment.
+
+The final nightly changed x64 runner models again (Linux EPYC 9V45 and Windows
+EPYC 7763) and showed a Linux ARM RGB-graphics dip. A
+[same-machine graphics check](https://github.com/bojosos/libpng_turbo/actions/runs/36337884642)
+at `03dd5f9` found Linux ARM RGB decode at 1.003x (0.981–1.024x), with palette
+RGB conversion still 1.917x faster. macOS palette RGB conversion measured
+1.586x (1.349–1.674x) against the original code, despite its latest nightly
+remaining below the zlib-ng reference. This check does not reproduce a graphics
+code regression. Current-code versus reference and new-code versus old-code
+are different comparisons; hosted-runner nightly swings require paired checks.
