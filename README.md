@@ -168,8 +168,11 @@ raw image; a decoder reads compressed input, so this is not a strict bound.
 - Match copies: 8x64-bit moves for dist>=64, 4x64-bit for dist>=32,
   64-byte periodic-pattern scratch for 1<=dist<32; overlap-safe tails.
 
-**Checksums** (`src/ptpng_crc.c`, `src/ptpng_avx2.c`, `src/ptpng_neon.c`):
-CRC-32 slicing-by-8; AVX2, SSE2 and NEON Adler-32 with bounded vector sums.
+**Checksums** (`src/ptpng_crc*.c`, `src/ptpng_avx2.c`, `src/ptpng_neon.c`):
+CRC-32 uses runtime-detected PCLMUL folding on x86 and CRC instructions on
+AArch64, with slicing-by-8 as the portable fallback. The PCLMUL implementation
+is adapted from zlib-ng; its license and attribution are retained in the source.
+Adler-32 uses AVX2, SSE2 or NEON with bounded vector sums.
 
 **Filters** (`src/ptpng_filters.c`)
 - Fused kernels: reconstruction reads the filtered bytes and writes the
@@ -178,8 +181,10 @@ CRC-32 slicing-by-8; AVX2, SSE2 and NEON Adler-32 with bounded vector sums.
   in-register log-doubling per 64-byte group with a cross-register
   pixel-carry chain. AVX2 and NEON dispatch also cover RGB and 16-bit RGB
   without copying the input row first. The x86 baseline uses SSE2 only.
-- `paeth`: AVX2 and NEON dispatch process four- and eight-byte pixels in parallel 16-bit
-  lanes, retaining the previous decoded pixel in a register. Other
+- `paeth`: AVX2 processes four- and eight-byte pixels, and NEON processes
+  eight-byte pixels, in parallel 16-bit lanes, retaining the previous decoded
+  pixel in a register. GCC ARM builds also use NEON for four-byte pixels;
+  Clang and MSVC favor scalar code for that stride. Other
   strides and CPUs use scalar predictors specialized per bytes per pixel.
 - `avg`: scalar code carries the independent channel recurrences in
   registers where possible.

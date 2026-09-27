@@ -157,7 +157,7 @@ static void deflate_make_codes(uint16_t literals[256], uint32_t lengths[259])
     }
 }
 
-#if PTPNG_X64
+#if PTPNG_DEFLATE_WORD_STORE
 /* Keep batching temporaries out of the usual literal/match search loop.
  * Only long runs produced by the existing search skip use this path. */
 #if defined(_MSC_VER)
@@ -242,7 +242,7 @@ static int deflate_fixed(const uint8_t *src, size_t size,
         if (misses < 1984) ++misses;
         next = pos + (size - pos < 1 + (misses >> 6) ?
                       size - pos : 1 + (misses >> 6));
-#if PTPNG_X64
+#if PTPNG_DEFLATE_WORD_STORE
         /* Keep ordinary short literal runs on the compiler's hot path. */
 #if defined(__GNUC__) || defined(__clang__)
         if (__builtin_expect(next - pos >= 8, 0)) {

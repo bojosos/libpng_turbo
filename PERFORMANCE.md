@@ -121,7 +121,7 @@ decoding and mutation fuzzing.
 
 Average and the remaining scalar Paeth strides are candidates for SIMD
 on ARM and x86. Four-byte Paeth pixels now use SIMD on AVX2 CPUs.
-CRC-32 still uses slicing-by-eight;
+CRC-32 now has runtime-detected PCLMUL and AArch64 CRC paths;
 hardware polynomial folding is another candidate. Any replacement
 needs corpus measurements with checksum verification enabled and tests
 for short rows, tails and fallback CPUs. A broader comparison should
@@ -454,3 +454,54 @@ against zlib. The seed corpus includes valid compressed profiles, suggested
 palettes, text-allocation boundaries, and full-sized random encoder inputs.
 Pixel/input limits and short campaign budgets remain deliberate restrictions;
 execution counts are not coverage percentages or proof of correctness.
+
+## Nightly graph audit, September 27
+
+The [September 24 baseline](https://github.com/bojosos/libpng_turbo/actions/runs/36062576710)
+and the scheduled runs on [September 25](https://github.com/bojosos/libpng_turbo/actions/runs/36113326363),
+[September 26](https://github.com/bojosos/libpng_turbo/actions/runs/36229352660), and
+[September 27](https://github.com/bojosos/libpng_turbo/actions/runs/36307712066)
+all tested unchanged commit `c1c133f`. Each run's 550 decoder and memory-copy
+measurements and 540 encoder measurements exactly match the published graph
+data. Changes between these four points cannot be attributed to code changes.
+
+Windows x64 alternated between EPYC 7763 on September 24/26 and EPYC 9V74 on
+September 25/27. Against September 24, the latest ptpng decode throughput rose
+14.5% at the median across cases, while libpng with zlib-ng rose 22.2%.
+macOS kept the same Apple M1 Virtual description but varied substantially:
+ptpng's median increase was 12.1%, with individual cases up to 60.3%; the
+reference median increased 17.5%. Within-run ratios help, but do not remove
+differences in how implementations respond to hardware and VM scheduling.
+
+The latest run gives these geometric means, weighting each case equally:
+
+| Platform | Decode speed vs libpng + zlib-ng | Encode speed vs libpng + zlib-ng level 1 |
+| --- | ---: | ---: |
+| Linux x64 | 1.533x | 5.487x |
+| macOS ARM64 | 1.324x | 4.897x |
+| Windows x64 | 1.433x | 4.907x |
+| Windows ARM64 | 1.253x | 4.242x |
+| Linux ARM64 | 1.250x | 4.435x |
+
+Decode covers nine synthetic images in three output formats; encode covers
+the nine images. These averages are not a claim about every workload.
+Random RGBA decoding remains slower than the reference on every platform.
+Linux ARM64 native/RGBA output runs at about 0.50x, and Linux x64 at 0.59x.
+Palette-to-RGB conversion on ARM runs at 0.715–0.784x. The encoder wins all
+45 platform/image comparisons against level 1, but its graphics files are
+4.54–4.96x larger than level 6. Encoded sizes remained identical across all
+four runs and all five platforms.
+
+The filter artifacts also show four-byte NEON Paeth behind scalar on their
+4096-byte rows: 0.605–0.670x on macOS, 0.798–0.808x on Windows ARM64 and
+0.965–0.973x on Linux ARM64. This microbenchmark alone is not grounds to
+disable the path. Its row pattern differs from whole-image random pixels,
+and GCC's scalar predictor branches can respond differently to that data.
+Native, paired whole-image measurements are needed to resolve the choice;
+the microbenchmark does not establish a Linux whole-image regression.
+
+The [performance graphs](https://bojosos.github.io/libpng_turbo/bench/) now
+label measurement dates, show compact CPU details, and link points to their
+Actions runs. Encoder comparisons include speed and file-size ratios against
+both zlib-ng level 1 and level 6, alongside the existing raw charts. Above
+1x means faster on speed charts; below 1x means smaller on size charts.
