@@ -41,11 +41,17 @@ if(PTPNG_X86)
         set_source_files_properties(src/ptpng_avx2.c src/ptpng_encode_avx2.c PROPERTIES
                                     COMPILE_OPTIONS "-mavx2")
     endif()
-    target_sources(ptpng PRIVATE src/ptpng_avx2.c src/ptpng_encode_avx2.c)
+    if(NOT MSVC)
+        set_source_files_properties(src/ptpng_crc_x86.c PROPERTIES
+                                    COMPILE_OPTIONS "-mpclmul;-msse2")
+    endif()
+    target_sources(ptpng PRIVATE src/ptpng_avx2.c src/ptpng_encode_avx2.c
+                                 src/ptpng_crc_x86.c)
 elseif(PTPNG_ARM)
     # NEON is baseline on aarch64; no extra flags needed. ptpng_neon.c
     # compiles to an empty TU if NEON is unavailable (armv7 without it).
-    target_sources(ptpng PRIVATE src/ptpng_neon.c src/ptpng_encode_neon.c)
+    target_sources(ptpng PRIVATE src/ptpng_neon.c src/ptpng_encode_neon.c
+                                 src/ptpng_crc_arm.c)
 endif()
 
 if(MSVC)

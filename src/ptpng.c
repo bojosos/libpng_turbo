@@ -110,9 +110,11 @@ void ptpng_cpu_init(void)
 #endif
 #if PTPNG_X86
     ptpng_avx2_init();
+    ptpng_crc_x86_init();
 #endif
 #if PTPNG_ARM_NEON
     ptpng_neon_init();
+    ptpng_crc_arm_init();
 #endif
 }
 
@@ -168,6 +170,8 @@ const char *ptpng_features(void)
 #endif
 #if PTPNG_ARM_NEON
     strcat(feats, "neon ");
+    if (ptpng_cpu.arm_crc32)
+        strcat(feats, "crc32 ");
 #endif
     if (!feats[0])
         strcat(feats, "scalar ");

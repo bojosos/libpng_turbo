@@ -41,6 +41,7 @@ int main(void)
             uint32_t got = ptpng_adler32(buf, n);
             uint32_t got2 = ptpng_adler32_scalar(buf, n);
             uint32_t gotc = ptpng_crc32_slice8(buf, n);
+            uint32_t dispatched_crc = ptpng_crc32(buf, n);
             if (got != a_ref || got2 != a_ref) {
                 printf("adler FAIL n=%zu sse2=%08x scalar=%08x ref=%08x\n",
                        n, got, got2, a_ref);
@@ -58,8 +59,9 @@ int main(void)
                 }
                 return 1;
             }
-            if (gotc != c_ref) {
-                printf("crc FAIL n=%zu got=%08x ref=%08x\n", n, gotc, c_ref);
+            if (gotc != c_ref || dispatched_crc != c_ref) {
+                printf("crc FAIL n=%zu scalar=%08x dispatched=%08x ref=%08x\n",
+                       n, gotc, dispatched_crc, c_ref);
                 return 1;
             }
         }
@@ -83,10 +85,11 @@ int main(void)
     /* Cross SIMD chunk boundaries and every AVX2 alignment, with an
      * exact-sized allocation so sanitizers also catch tail overreads. */
     for (i = 0; i < 32; i++) {
-        static const size_t lengths[] = {31,32,33,4095,4096,4097,8191,8192,8193};
+        static const size_t lengths[] = {0,1,7,8,15,16,17,31,32,33,63,64,65,
+                                        127,128,129,4095,4096,4097,8191,8192,8193};
         for (j = 0; j < sizeof(lengths) / sizeof(lengths[0]); j++) {
             size_t n = lengths[j], k;
-            uint8_t *allocation = (uint8_t *)malloc(n + i);
+            uint8_t *allocation = (uint8_t *)malloc(n + i ? n + i : 1);
             uint8_t *buf = allocation + i;
             uint64_t a = 1, b = 0;
             for (k = 0; k < n; k++) {
@@ -96,6 +99,11 @@ int main(void)
             if (ptpng_adler32(buf, n) !=
                 (uint32_t)(((b % 65521u) << 16) | (a % 65521u))) {
                 printf("adler boundary FAIL n=%zu offset=%u\n", n, i);
+                free(allocation);
+                return 1;
+            }
+            if (ptpng_crc32(buf, n) != ptpng_crc32_slice8(buf, n)) {
+                printf("crc boundary FAIL n=%zu offset=%u\n", n, i);
                 free(allocation);
                 return 1;
             }
