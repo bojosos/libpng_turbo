@@ -91,20 +91,32 @@ PTPNG_API_INLINE uint16x8_t paeth_pixel_neon(uint16x8_t s, uint16x8_t a,
     return vandq_u16(vaddq_u16(s, predictor), vdupq_n_u16(255));
 }
 
+/* Keep the original kernel separate from the stride-selection wrapper.
+ * Simplifying its control flow regressed eight-byte pixels with MSVC. */
+#if defined(_MSC_VER)
+__declspec(noinline)
+#elif defined(__clang__)
+__attribute__((noinline))
+#endif
 static void ptpng_filter_paeth_neon(uint8_t *dst, const uint8_t *src,
                                    const uint8_t *prev, size_t count,
                                    unsigned bpp)
 {
     size_t i = 0;
     uint16x8_t a = vdupq_n_u16(0), c = vdupq_n_u16(0);
-#if defined(__GNUC__) && !defined(__clang__)
-    /* GCC emits a data-dependent branch in the scalar fourth channel.
-     * A repeated-row microbenchmark hides its cost on random alpha;
-     * whole-image noise decoding is faster with the SIMD predictor. */
-    if (bpp == 4) {
+    if (bpp == 8) {
+        for (; i + 8 <= count; i += 8) {
+            uint16x8_t b = vmovl_u8(vld1_u8(prev + i));
+            uint16x8_t s = vmovl_u8(vld1_u8(src + i));
+            a = paeth_pixel_neon(s, a, b, c);
+            c = b;
+            vst1_u8(dst + i, vmovn_u16(a));
+        }
+    } else if (bpp == 4) {
         for (; i + 4 <= count; i += 4) {
             uint32_t sv, bv, output;
             uint16x8_t b, s;
+            /* Exactly four bytes are accessible at the end of a short row. */
             memcpy(&sv, src + i, 4);
             memcpy(&bv, prev + i, 4);
             b = vmovl_u8(vcreate_u8(bv));
@@ -114,25 +126,10 @@ static void ptpng_filter_paeth_neon(uint8_t *dst, const uint8_t *src,
             output = vget_lane_u32(vreinterpret_u32_u8(vmovn_u16(a)), 0);
             memcpy(dst + i, &output, 4);
         }
-        goto tail;
-    }
-#endif
-    /* Clang and MSVC favor scalar four-byte chains. Eight-byte pixels
-     * benefit from using every SIMD lane on all measured ARM64 targets. */
-    if (bpp != 8) {
+    } else {
         ptpng_filter_paeth_scalar(dst, src, prev, count, bpp);
         return;
     }
-    for (; i + 8 <= count; i += 8) {
-        uint16x8_t b = vmovl_u8(vld1_u8(prev + i));
-        uint16x8_t s = vmovl_u8(vld1_u8(src + i));
-        a = paeth_pixel_neon(s, a, b, c);
-        c = b;
-        vst1_u8(dst + i, vmovn_u16(a));
-    }
-#if defined(__GNUC__) && !defined(__clang__)
-tail:
-#endif
     for (; i < count; i++) {
         int left = i >= bpp ? dst[i - bpp] : 0;
         int up = prev[i], upper_left = i >= bpp ? prev[i - bpp] : 0;
@@ -142,6 +139,20 @@ tail:
         dst[i] = (uint8_t)(src[i] + predictor);
     }
 }
+
+#if defined(_MSC_VER) || defined(__clang__)
+static void ptpng_filter_paeth_neon_dispatch(uint8_t *dst, const uint8_t *src,
+                                            const uint8_t *prev, size_t count,
+                                            unsigned bpp)
+{
+    /* These compilers favor scalar four-byte chains. GCC retains SIMD
+     * because its scalar fourth-channel branch slows random-alpha images. */
+    if (bpp == 4)
+        ptpng_filter_paeth_scalar(dst, src, prev, count, bpp);
+    else
+        ptpng_filter_paeth_neon(dst, src, prev, count, bpp);
+}
+#endif
 
 /* Modulo reduction every 2048 bytes keeps the weighted sum below 2^31,
  * even for all-255 input. Accumulate four independent sums per vector. */
@@ -301,7 +312,11 @@ void ptpng_neon_init(void)
     ptpng_cpu.filter_sub = ptpng_filter_sub_neon;
     ptpng_cpu.adler32 = ptpng_adler32_neon;
     ptpng_cpu.filter_up = ptpng_filter_up_neon;
+#if defined(_MSC_VER) || defined(__clang__)
+    ptpng_cpu.filter_paeth = ptpng_filter_paeth_neon_dispatch;
+#else
     ptpng_cpu.filter_paeth = ptpng_filter_paeth_neon;
+#endif
     ptpng_cpu.cvt_table_rgba8 = ptpng_cvt_table_rgba8_neon;
     ptpng_cpu.cvt_table_rgb8 = ptpng_cvt_table_rgb8_neon;
     ptpng_cvt_table_rgba8_neon[(0 << 4) | 3] = rgba8_g8_neon;
