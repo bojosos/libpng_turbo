@@ -1,0 +1,85 @@
+name: Paired performance
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseline:
+        description: Full baseline commit SHA
+        required: true
+      pairs:
+        description: Alternating pairs per image, 3-21
+        default: '9'
+        required: true
+      seconds:
+        description: Seconds per timed loop, 0.1-5
+        default: '1'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: paired-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compare:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            os: ubuntu-24.04
+          - name: linux-arm64
+            os: ubuntu-24.04-arm
+          - name: macos-arm64
+            os: macos-14
+          - name: windows-x64
+            os: windows-latest
+            cmake_args: -A x64
+          - name: windows-arm64
+            os: windows-11-arm
+            cmake_args: -A ARM64
+    name: paired-${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    env:
+      PAIRS: ${{ inputs.pairs }}
+      SECONDS_PER_LOOP: ${{ inputs.seconds }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.baseline }}
+          path: baseline
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate identical inputs
+        run: |
+          python -m pip install --quiet pillow
+          python tests/gen_bench.py
+          python tests/gen_bench16.py
+      - name: Build both versions with identical settings
+        run: |
+          cmake -S . -B build_paired -DCMAKE_BUILD_TYPE=Release -DPTPNG_WITH_LIBPNG=OFF ${{ matrix.cmake_args }}
+          cmake --build build_paired --config Release --parallel 2
+          ctest --test-dir build_paired -C Release --output-on-failure
+          cmake -S baseline -B build_baseline -DCMAKE_BUILD_TYPE=Release -DPTPNG_WITH_LIBPNG=OFF ${{ matrix.cmake_args }}
+          cmake --build build_baseline --target profile_png --config Release --parallel 2
+      - name: Compare all image types
+        shell: bash
+        run: |
+          mkdir -p paired-results
+          git rev-parse HEAD > paired-results/candidate.txt
+          git -C baseline rev-parse HEAD > paired-results/baseline.txt
+          python tools/bench_metadata.py paired-results/machine.json
+          suffix=''
+          if [ "$RUNNER_OS" = Windows ]; then suffix='.exe'; fi
+          python tools/compare_profiles.py "build_baseline/profile_png$suffix" "build_paired/profile_png$suffix" paired-results --pairs "$PAIRS" --seconds "$SECONDS_PER_LOOP"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paired-${{ matrix.name }}
+          path: paired-results/
+          retention-days: 14

@@ -3,6 +3,17 @@
  * All compression state belongs to the call. */
 #include "ptpng_internal.h"
 
+/* These 64-bit targets permit unaligned stores. Keep big-endian ARM and
+ * architectures with unknown byte order on the byte-oriented writer. */
+#if PTPNG_X64 || defined(_M_ARM64) || \
+    (defined(__aarch64__) && defined(__BYTE_ORDER__) && \
+     defined(__ORDER_LITTLE_ENDIAN__) && \
+     __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
+#define PTPNG_DEFLATE_WORD_STORE 1
+#else
+#define PTPNG_DEFLATE_WORD_STORE 0
+#endif
+
 static const uint16_t deflate_len_base[29] = {
     3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,
     115,131,163,195,227,258
@@ -27,14 +38,14 @@ PTPNG_API_INLINE unsigned deflate_reverse8(unsigned value)
            deflate_reverse4[(value >> 4) & 15];
 }
 
-/* count is at most 31. The x64 writer keeps fewer than eight pending
+/* count is at most 31. The word-store writer keeps fewer than eight pending
  * bits; the portable writer keeps fewer than 32. */
 PTPNG_API_INLINE int deflate_put(deflate_writer *w, uint32_t value,
                                  unsigned count)
 {
     w->bits |= (uint64_t)value << w->count;
     w->count += count;
-#if PTPNG_X64
+#if PTPNG_DEFLATE_WORD_STORE
     {
         unsigned bytes = w->count >> 3;
         /* An unaligned little-endian store commits all complete bytes at

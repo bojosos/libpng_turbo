@@ -74,7 +74,7 @@ static void ptpng_filter_sub_neon(uint8_t *dst, const uint8_t *src,
 #undef SUB_BLOCKS
 #undef SUB_PREFIX
 
-/* Four- and eight-byte pixels contain independent Paeth chains. Signed
+/* Eight-byte pixels contain independent Paeth chains. Signed
  * 16-bit thresholds cover -510..765; equality selects a or b, never c. */
 PTPNG_API_INLINE uint16x8_t paeth_pixel_neon(uint16x8_t s, uint16x8_t a,
                                           uint16x8_t b, uint16x8_t c)
@@ -97,31 +97,19 @@ static void ptpng_filter_paeth_neon(uint8_t *dst, const uint8_t *src,
 {
     size_t i = 0;
     uint16x8_t a = vdupq_n_u16(0), c = vdupq_n_u16(0);
-    if (bpp == 8) {
-        for (; i + 8 <= count; i += 8) {
-            uint16x8_t b = vmovl_u8(vld1_u8(prev + i));
-            uint16x8_t s = vmovl_u8(vld1_u8(src + i));
-            a = paeth_pixel_neon(s, a, b, c);
-            c = b;
-            vst1_u8(dst + i, vmovn_u16(a));
-        }
-    } else if (bpp == 4) {
-        for (; i + 4 <= count; i += 4) {
-            uint32_t sv, bv, output;
-            uint16x8_t b, s;
-            /* Exactly four bytes are accessible at the end of a short row. */
-            memcpy(&sv, src + i, 4);
-            memcpy(&bv, prev + i, 4);
-            b = vmovl_u8(vcreate_u8(bv));
-            s = vmovl_u8(vcreate_u8(sv));
-            a = paeth_pixel_neon(s, a, b, c);
-            c = b;
-            output = vget_lane_u32(vreinterpret_u32_u8(vmovn_u16(a)), 0);
-            memcpy(dst + i, &output, 4);
-        }
-    } else {
+    /* Four-byte SIMD pixels measured slower than scalar register chains
+     * on macOS, Windows and Linux ARM64. Eight-byte pixels benefit from
+     * using every lane, so keep SIMD only for that stride. */
+    if (bpp != 8) {
         ptpng_filter_paeth_scalar(dst, src, prev, count, bpp);
         return;
+    }
+    for (; i + 8 <= count; i += 8) {
+        uint16x8_t b = vmovl_u8(vld1_u8(prev + i));
+        uint16x8_t s = vmovl_u8(vld1_u8(src + i));
+        a = paeth_pixel_neon(s, a, b, c);
+        c = b;
+        vst1_u8(dst + i, vmovn_u16(a));
     }
     for (; i < count; i++) {
         int left = i >= bpp ? dst[i - bpp] : 0;
