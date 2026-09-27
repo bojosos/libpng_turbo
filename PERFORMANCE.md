@@ -122,7 +122,7 @@ decoding and mutation fuzzing.
 Average and the remaining scalar Paeth strides are candidates for SIMD
 on ARM and x86. Four-byte Paeth pixels now use SIMD on AVX2 CPUs.
 CRC-32 now has runtime-detected PCLMUL and AArch64 CRC paths;
-hardware polynomial folding is another candidate. Any replacement
+parallel ARM CRC chains remain a candidate. Any replacement
 needs corpus measurements with checksum verification enabled and tests
 for short rows, tails and fallback CPUs. A broader comparison should
 include other specialized PNG decoders and a real-image corpus before
@@ -505,3 +505,86 @@ label measurement dates, show compact CPU details, and link points to their
 Actions runs. Encoder comparisons include speed and file-size ratios against
 both zlib-ng level 1 and level 6, alongside the existing raw charts. Above
 1x means faster on speed charts; below 1x means smaller on size charts.
+
+## Hardware checksums and palette expansion, September 27
+
+PNG CRC now uses four PCLMUL folding chains on capable x86 CPUs and IEEE
+CRC instructions on capable AArch64 CPUs. Runtime checks retain the portable
+implementation on CPUs without those instructions. The x86 implementation
+derives from zlib-ng, with its license retained in the source. Exact loads and
+scalar tails avoid reading beyond the input. Checksum tests compare dispatched
+results with the scalar reference across lengths, alignments and buffer ends.
+
+The ARM64 encoder now uses the bounded 64-bit writer and three-literal batching
+previously used on x64. The writer alone made photos faster but slowed noisy
+encoding by 16–19% on Linux/Windows ARM64. Batching targets those long literal
+runs; compression decisions and encoded bytes are unchanged.
+
+Paeth selection also needs compiler-specific whole-image evidence. GCC retains
+four-byte NEON because its scalar fourth channel has a data-dependent branch
+that slows random alpha. Clang selects scalar for four-byte pixels, with the
+NEON kernel separate from that selection. MSVC retains its original direct
+NEON dispatch: scalar selection made RGBA8 photos faster but slowed the flat
+RGBA16 case, even after restoring the original kernel body behind a wrapper.
+
+The [Linux profile](https://github.com/bojosos/libpng_turbo/actions/runs/36335673907)
+at `dd1c78a` exposed hardware counters on Neoverse-N2 ARM64 and software timer
+samples on EPYC 7763 x64. Palette-to-RGB conversion accounted for 83.0% and
+84.9% of samples respectively. The revised converter uses the existing packed
+palette table, one four-byte copy per pixel, and an exact three-byte final copy.
+Every store stays within the output row. It covers all four palette depths.
+On the i7-1355U, 21 alternating same-process pairs against the hardware-CRC build
+measured 1.231x P-core and 1.313x E-core whole-image RGB decode throughput;
+thread-cycle ratios were 1.214x and 1.312x. Pixels matched, and independent
+libpng parity tests passed.
+
+Noise still has room for improvement. ARM decode samples attributed 40.1% to
+Paeth, 17.1% to Adler and 13.3% to CRC. Encoder literal batching plus fixed-code
+compression took about 60–63% on both Linux architectures before stored-block
+fallback. These are sampled self costs, not exact stage durations. An early
+stored-block decision needs compression-size testing on mixed content before
+it can replace that work.
+
+The Linux CI noise PNG was 3,147,615 bytes; local, macOS and Windows generated
+PNGs were 3,319,878 bytes.
+They exercise different compressed streams despite matching image dimensions.
+Each paired comparison uses one shared input file, but results across those
+fixtures should not be equated. Future Linux profile artifacts retain the PNGs
+as well as the executable, stacks and annotated instructions.
+
+The final [sanitizer fuzz campaign](https://github.com/bojosos/libpng_turbo/actions/runs/36336235745)
+completed 4,415,223 executions across decode, inflate and encode targets on
+x64/ARM64, 120 seconds per target, with no reported failures. The final
+[CI matrix](https://github.com/bojosos/libpng_turbo/actions/runs/36336218991)
+and [five-platform nightly](https://github.com/bojosos/libpng_turbo/actions/runs/36336232524)
+also passed. These remain bounded campaigns, not proof of correctness.
+
+The [full paired comparison](https://github.com/bojosos/libpng_turbo/actions/runs/36336395808)
+tested `8c6940f` against `c1c133f` with nine alternating one-second pairs per
+workload. Each old/new pair ran on the same machine and input; Linux and Windows
+were pinned to one logical CPU, while macOS was OS scheduled. Ratios below are
+median throughput ratios. Every paired output size matched.
+
+| Platform | Noise decode | Noise encode | Palette-to-RGB decode |
+| --- | ---: | ---: | ---: |
+| Linux x64 | 1.502x | 1.144x | 1.718x |
+| Windows x64 | 1.122x | 1.180x | 1.326x |
+| macOS ARM64 | 1.203x | 1.594x | 1.467x |
+| Linux ARM64 | 1.464x | 1.413x | 1.912x |
+| Windows ARM64 | 1.143x | 1.681x | 1.400x |
+
+These results exposed remaining flat RGBA16 decode regressions: Linux ARM64
+was 0.966x (0.962–0.969x pair range), and Windows ARM64 was 0.947x
+(0.943–0.952x). Restoring the old kernel body behind a wrapper did not fix the
+Windows case. They prompted a focused follow-up on compiler-specific dispatch
+and loop layout; the broad improvements do not cancel out these losses.
+
+The [focused follow-up](https://github.com/bojosos/libpng_turbo/actions/runs/36337098143)
+tested `252da3d` against the same original baseline, nine alternating half-second
+pairs. Retaining GCC's measured four-byte-first loop layout restored flat
+RGBA16 decode to 1.001x (0.995–1.011x). Restoring MSVC's original direct dispatch
+put Windows ARM64 flat RGBA16 at 1.032x (1.026–1.036x), with RGBA8 photo decode
+still 1.057x faster. Linux/Windows ARM64 noise encoding remained 1.378x/1.704x.
+This final choice gives up some Windows RGBA8 photo gain to remove the flat-image
+regression. All platform CI checks and the push-triggered sanitizer fuzzing
+passed after this adjustment.

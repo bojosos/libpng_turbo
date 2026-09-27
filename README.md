@@ -140,7 +140,9 @@ expand to RGBA8 for both encoders in this comparison. Example:
 ```
 
 Nightly [dark charts](https://bojosos.github.io/libpng_turbo/bench/) show
-within-run decoder ratios first. Raw results include encoder time/size
+within-run decoder ratios first, followed by encoder speed and file-size
+ratios against zlib-ng levels 1 and 6. Points use measurement dates and link
+to their Actions run. Raw results include encoder time/size
 and a measured memory-copy reference. GitHub-hosted jobs use fresh virtual
 machines, so absolute throughput is not directly comparable across runs.
 New benchmark artifacts record the CPU, OS and runner image. Ratios help
@@ -153,6 +155,13 @@ limit, since compression, filtering, checksums and pixel layout change
 the work required. Its tooltip gives RGB8 and RGBA8 pixel equivalents by
 dividing payload MB/s by three and four. Copying reads and writes an entire
 raw image; a decoder reads compressed input, so this is not a strict bound.
+
+The manual `Paired performance` workflow compares a full baseline commit SHA
+with the current revision on all five runner platforms. It alternates nine
+one-second timing pairs for each of nine decode/encode fixtures, plus
+palette-to-RGB conversion. Linux and Windows runs pin one logical CPU;
+macOS remains OS scheduled. Artifacts contain raw pairs, output sizes,
+machine details and a Markdown summary.
 
 ## Design: where the speed comes from
 
@@ -183,8 +192,8 @@ Adler-32 uses AVX2, SSE2 or NEON with bounded vector sums.
   without copying the input row first. The x86 baseline uses SSE2 only.
 - `paeth`: AVX2 processes four- and eight-byte pixels, and NEON processes
   eight-byte pixels, in parallel 16-bit lanes, retaining the previous decoded
-  pixel in a register. GCC ARM builds also use NEON for four-byte pixels;
-  Clang and MSVC favor scalar code for that stride. Other
+  pixel in a register. GCC and MSVC ARM builds also use NEON for four-byte
+  pixels; Clang favors scalar code for that stride. Other
   strides and CPUs use scalar predictors specialized per bytes per pixel.
 - `avg`: scalar code carries the independent channel recurrences in
   registers where possible.
