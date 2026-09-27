@@ -454,12 +454,18 @@ static void rgb8_rgb16(const uint8_t *src, uint8_t *dst, uint32_t n,
 static void rgb8_p##d(const uint8_t *src, uint8_t *dst, uint32_t n,       \
                       const struct ptpng_cvt *c)                          \
 {                                                                         \
-    const uint8_t *pal = c->palette;                                      \
+    const uint8_t *pal = c->pal_rgba;                                     \
     uint32_t i;                                                           \
-    for (i = 0; i < n; i++) {                                             \
+    /* The next pixel overwrites the fourth byte; keep the final store   \
+     * exact so no write crosses the output row. */                       \
+    for (i = 0; i + 1 < n; i++) {                                         \
         unsigned v = BIT_AT(src, i, d);                                   \
-        *dst++ = pal[v * 3]; *dst++ = pal[v * 3 + 1];                     \
-        *dst++ = pal[v * 3 + 2];                                          \
+        memcpy(dst, pal + v * 4, 4);                                      \
+        dst += 3;                                                         \
+    }                                                                     \
+    if (i < n) {                                                          \
+        unsigned v = BIT_AT(src, i, d);                                   \
+        memcpy(dst, pal + v * 4, 3);                                      \
     }                                                                     \
 }
 PAL_TO_RGB8(1)
@@ -1401,7 +1407,7 @@ int ptpng_decode(const void *data, size_t size, const ptpng_opts *opts,
         cvt.trns_b = linfo.trns[2];
         cvt.has_trns = linfo.has_trns;
         if (ct == 3) {
-            /* precombined rgba table for the gather path */
+            /* Packed entries serve RGB stores and the RGBA gather path. */
             unsigned pi;
             for (pi = 0; pi < linfo.num_palette; pi++) {
                 cvt.pal_rgba[pi * 4 + 0] = linfo.palette[pi * 3 + 0];

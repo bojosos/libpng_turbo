@@ -24,6 +24,10 @@ printf '# Linux PNG profile\n\n' > "$summary"
 } > "$out/machine.txt" 2>&1
 cp "$driver" "$out/profile_png"
 cp "$build/compile_commands.json" "$out/" 2>/dev/null || true
+# Pillow/zlib versions can encode the same pixels with different block types.
+# Retain the actual inputs so profiles can be reproduced and inspected.
+mkdir -p "$out/inputs"
+cp tests/bench/*.png "$out/inputs/"
 
 # The Ubuntu wrapper needs a kernel-matching package. A directly installed
 # perf binary is also usable when that package is absent from the image repo.

@@ -42,8 +42,7 @@ def set_affinity():
     return "OS scheduled; strict CPU affinity unavailable"
 
 
-def measure(driver, operation, name, seconds):
-    fmt = "rgba8" if operation == "encode" and name == "graphic_pal8" else "native"
+def measure(driver, operation, name, seconds, fmt):
     command = [str(driver), operation, f"tests/bench/{name}.png", str(seconds), fmt]
     output = subprocess.check_output(command, text=True, timeout=90)
     fields = dict(token.split("=", 1) for token in output.split() if "=" in token)
@@ -71,18 +70,22 @@ def main():
              "paired minima/maxima, not confidence intervals.", "",
              "| Workload | Median speedup | Pair range |",
              "|---|---:|---:|"]
-    for operation, name in ((operation, name) for operation in ("decode", "encode")
-                             for name in args.images):
+    workloads = [(operation, name,
+                  "rgba8" if operation == "encode" and name == "graphic_pal8" else "native")
+                 for operation in ("decode", "encode") for name in args.images]
+    if "graphic_pal8" in args.images:
+        workloads.append(("decode", "graphic_pal8", "rgb8"))
+    for operation, name, fmt in workloads:
         pairs = []
         for iteration in range(args.pairs):
             values = [None, None]
             for index in (iteration % 2, 1 - iteration % 2):
-                values[index] = measure(drivers[index], operation, name, args.seconds)
+                values[index] = measure(drivers[index], operation, name, args.seconds, fmt)
             pairs.append({"baseline": values[0][0], "candidate": values[1][0],
                           "ratio": values[1][0] / values[0][0],
                           "logs": [value[1] for value in values]})
         ratios = [pair["ratio"] for pair in pairs]
-        workload = f"{operation}-{name}"
+        workload = f"{operation}-{name}" + ("-rgb8" if fmt == "rgb8" else "")
         results.append({"workload": workload, "affinity": affinity,
                         "platform": platform.platform(), "pairs": pairs})
         lines.append(f"| {workload} | {statistics.median(ratios):.3f}x | "
