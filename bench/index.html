@@ -127,7 +127,12 @@
       1× means equal throughput. Ratios reduce machine variation but do not replace paired
       old/new tests on one machine. Expand raw results for absolute throughput and encoding
       time/size. The memory-copy measurement is a reference, not a theoretical PNG ceiling.
-      New results include runner details in their tooltips and downloadable data.</p>
+      Tooltips show the measurement date and CPU. Click a point to open its GitHub Actions
+      run, or its commit when older data has no run record.</p>
+    <p>Speed ratios divide reference time by ptpng time: above 1× is faster.
+      File-size ratios divide ptpng bytes by reference bytes: below 1× is smaller.
+      The dashed 1× line means equal performance or equal file size. Encoding comparisons
+      include both zlib-ng level 1 and level 6, so speed and compression can be judged together.</p>
     <p>Decoder points from <code>e6f083c</code> onward use medians of 12 alternating
       rounds; earlier points used best-of-12 timings.</p>
     <main id="main"></main>
@@ -166,6 +171,27 @@
           _: '#a5aab3'
         };
 
+        function runnerMetadata(bench) {
+          const line = (bench.extra || '').split('\n').find(line => line.startsWith('Runner: '));
+          if (!line) return null;
+          try { return JSON.parse(line.slice(8)); } catch (_) { return null; }
+        }
+
+        function cpuSummary(metadata) {
+          if (!metadata) return 'CPU not recorded';
+          const cpu = metadata.cpu || '';
+          const model = cpu.match(/(?:Model name|machdep\.cpu\.brand_string):\s*([^\n]+)/);
+          const name = model ? model[1].trim() : cpu.split('\n')[0].trim();
+          return (name || metadata.machine || 'Unknown CPU') +
+            (metadata.logical_cpus ? ' · ' + metadata.logical_cpus + ' logical CPUs' : '');
+        }
+
+        function runUrl(point) {
+          const metadata = runnerMetadata(point.bench);
+          return metadata && /^\d+$/.test(String(metadata.run_id)) ?
+            window.BENCHMARK_DATA.repoUrl + '/actions/runs/' + metadata.run_id : point.commit.url;
+        }
+
         function init() {
           function collectBenchesPerTestCase(entries) {
             const map = new Map();
@@ -203,11 +229,32 @@
 
           // Prepare data points for charts
           const ratios = [];
+          const encodeSpeed = [];
+          const encodeSize = [];
           for (const entries of Object.values(data.entries)) {
             for (const entry of entries) {
               const byName = new Map(entry.benches.map(b => [b.name, b]));
               const benches = [];
+              const speedBenches = [];
+              const sizeBenches = [];
               for (const bench of entry.benches) {
+                const encode = bench.name.match(/^(.*?) \/ ptpng-vs-libpng-zng (encode time|encoded size)$/);
+                if (encode && bench.value > 0) {
+                  const isTime = encode[2] === 'encode time';
+                  for (const level of [1, 6]) {
+                    const ref = byName.get(encode[1] + ' / libpng-zng-level' + level + ' ' + encode[2]);
+                    if (!ref || ref.unit !== bench.unit || !(ref.value > 0)) continue;
+                    const result = {
+                      name: encode[1] + ' / ' + (isTime ? 'encode speedup over ' : 'file size relative to ') +
+                        'libpng-zng-level' + level,
+                      unit: isTime ? '× reference speed (higher is faster)' : '× reference bytes (lower is smaller)',
+                      value: isTime ? ref.value / bench.value : bench.value / ref.value,
+                      extra: 'ptpng ' + bench.value + ' vs reference ' + ref.value + ' ' + bench.unit +
+                        '\n' + (bench.extra || '')
+                    };
+                    (isTime ? speedBenches : sizeBenches).push(result);
+                  }
+                }
                 if (!bench.name.includes('/ptpng-vs-') || bench.unit !== 'MPix/s') continue;
                 const ref = byName.get(bench.name.replace('/ptpng-vs-', '/'));
                 if (!ref || !(ref.value > 0)) continue;
@@ -216,23 +263,30 @@
                   extra: bench.value + ' vs ' + ref.value + ' MPix/s\n' + (bench.extra || '')});
               }
               if (benches.length) ratios.push({...entry, benches});
+              if (speedBenches.length) encodeSpeed.push({...entry, tool: 'customBiggerIsBetter', benches: speedBenches});
+              if (sizeBenches.length) encodeSize.push({...entry, benches: sizeBenches});
             }
           }
-          return [{name: 'Within-run decoder speedup', dataSet: collectBenchesPerTestCase(ratios)},
-            ...Object.keys(data.entries).map(name => ({name, raw: true,
+          return [{name: 'Within-run decoder speedup', ratio: true,
+              dataSet: collectBenchesPerTestCase(ratios)},
+            {name: 'Encoder speed ratios · higher is faster', ratio: true, collapsed: true,
+              dataSet: collectBenchesPerTestCase(encodeSpeed)},
+            {name: 'Encoder file-size ratios · lower is smaller', ratio: true, collapsed: true,
+              dataSet: collectBenchesPerTestCase(encodeSize)},
+            ...Object.keys(data.entries).map(name => ({name, raw: true, collapsed: true,
               dataSet: collectBenchesPerTestCase(data.entries[name])}))];
         }
 
         function renderAllChars(dataSets) {
 
-          function renderGraph(parent, name, dataset) {
+          function renderGraph(parent, name, dataset, ratio) {
             const canvas = document.createElement('canvas');
             canvas.className = 'benchmark-chart';
             parent.appendChild(canvas);
 
             const color = toolColors[dataset.length > 0 ? dataset[0].tool : '_'];
             const data = {
-              labels: dataset.map(d => d.commit.id.slice(0, 7)),
+              labels: dataset.map(d => new Date(d.date).toISOString().slice(5, 16).replace('T', ' ')),
               datasets: [
                 {
                   label: name,
@@ -243,13 +297,18 @@
                 }
               ],
             };
+            if (ratio) data.datasets.push({
+              label: '1× = equal', data: dataset.map(() => 1),
+              borderColor: '#8b949e', borderDash: [5, 5], borderWidth: 1,
+              fill: false, pointRadius: 0, pointHitRadius: 0, lineTension: 0
+            });
             const options = {
               scales: {
                 xAxes: [
                   {
                     scaleLabel: {
                       display: true,
-                      labelString: 'commit',
+                      labelString: 'Measurement date (UTC)',
                     },
                   }
                 ],
@@ -266,11 +325,18 @@
                 ],
               },
               tooltips: {
+                filter: item => item.datasetIndex === 0,
                 callbacks: {
                   afterTitle: items => {
                     const {index} = items[0];
                     const data = dataset[index];
-                    return '\n' + data.commit.message + '\n\n' + data.commit.timestamp + ' committed by @' + data.commit.committer.username + '\n';
+                    const metadata = runnerMetadata(data.bench);
+                    return [
+                      'Measured: ' + new Date(data.date).toISOString(),
+                      'Commit: ' + data.commit.id.slice(0, 7),
+                      cpuSummary(metadata),
+                      metadata && metadata.run_id ? 'Run: ' + metadata.run_id + ' · click to open' : 'Click to open commit'
+                    ];
                   },
                   label: item => {
                     let label = item.value;
@@ -283,7 +349,7 @@
                   },
                   afterLabel: item => {
                     const { extra } = dataset[item.index].bench;
-                    return extra ? '\n' + extra : '';
+                    return extra ? extra.split('\n').filter(line => !line.startsWith('Runner: ')) : '';
                   }
                 }
               },
@@ -293,7 +359,7 @@
                 }
                 // XXX: Undocumented. How can we know the index?
                 const index = activeElems[0]._index;
-                const url = dataset[index].commit.url;
+                const url = runUrl(dataset[index]);
                 window.open(url, '_blank');
               },
             };
@@ -305,7 +371,7 @@
             });
           }
 
-          function renderBenchSet(name, benchSet, main) {
+          function renderBenchSet(name, benchSet, main, ratio) {
             const setElem = document.createElement('div');
             setElem.className = 'benchmark-set';
             main.appendChild(setElem);
@@ -320,32 +386,32 @@
             setElem.appendChild(graphsElem);
 
             for (const [benchName, benches] of benchSet.entries()) {
-              renderGraph(graphsElem, benchName, benches)
+              renderGraph(graphsElem, benchName, benches, ratio)
             }
             return setElem;
           }
 
           const main = document.getElementById('main');
           const navigation = document.getElementById('benchmark-nav');
-          for (const [index, {name, dataSet, raw}] of dataSets.entries()) {
+          for (const [index, {name, dataSet, raw, ratio, collapsed}] of dataSets.entries()) {
             const link = document.createElement('a');
             link.href = '#benchmark-' + index;
-            link.textContent = !raw ? 'Decoder speed ratios' :
+            link.textContent = !raw ? name :
               name === 'PNG encoding time and size (nightly)' ? 'Encoder time and file size' :
               name === 'ptpng vs libpng (nightly)' ? 'Raw decoder throughput' : name;
             navigation.appendChild(link);
             let target;
-            if (raw) {
+            if (collapsed) {
               const details = document.createElement('details');
               target = details;
               const summary = document.createElement('summary');
-              summary.textContent = 'Raw results: ' + name;
+              summary.textContent = (raw ? 'Raw results: ' : '') + name;
               details.appendChild(summary);
               main.appendChild(details);
               // Build charts only when visible so canvas dimensions are correct.
               const renderRaw = () => {
                 if (details.open && !details.dataset.rendered) {
-                  renderBenchSet(name, dataSet, details);
+                  renderBenchSet(name, dataSet, details, ratio);
                   details.dataset.rendered = 'true';
                 }
               };
@@ -355,7 +421,7 @@
                 // Render before the anchor jumps, so its position is final.
                 renderRaw();
               };
-            } else target = renderBenchSet(name, dataSet, main);
+            } else target = renderBenchSet(name, dataSet, main, ratio);
             target.id = 'benchmark-' + index;
           }
         }
