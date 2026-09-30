@@ -598,3 +598,88 @@ RGB conversion still 1.917x faster. macOS palette RGB conversion measured
 remaining below the zlib-ng reference. This check does not reproduce a graphics
 code regression. Current-code versus reference and new-code versus old-code
 are different comparisons; hosted-runner nightly swings require paired checks.
+
+## 30 September profiling and literal batching
+
+This round compares `86bcf29` with `5deaece`, the code used by the previous
+nightlies. A fresh VTune software profile on the i7-1355U, pinned to P-core
+logical CPU 2, attributed 80.4% of noise-decode samples to `inflate_impl` and
+3.9% to Paeth. Hardware counter collection still requires an elevated VTune
+process on that Windows machine. Profiling timings are not benchmark timings.
+
+The [fresh Linux profiles](https://github.com/bojosos/libpng_turbo/actions/runs/36749760593)
+used EPYC 7763 software samples and Neoverse-N2 hardware cycles. The ARM noise
+decode attributed 38.1% of samples to Paeth, 18.2% to Adler and 16.0% to CRC.
+Noise encoding attributed 49.1%/53.3% to literal emission on x64/ARM64.
+The artifacts retain inputs, binaries, annotated instructions and counter reports.
+Linux noise again used stored blocks; Windows/macOS noise used a fixed-Huffman
+stream. Each old/new pair shares its input, but these workloads differ across OSes.
+
+The changes preserve pixels, compression decisions and encoded bytes:
+
+- Decode up to four root-table literals per refill. Refill before processing
+  a following match, and keep exact output and input boundaries.
+- Classify valid root literals with one comparison. Reserved symbols 286/287
+  have zero-length entries and remain errors.
+- Emit six encoder literals per bounded 64-bit store, keeping writer state in
+  registers during long runs. Short tails retain the existing bounded writer.
+- Expand RGB8 to RGBA8 using NEON structured loads and stores, with exact vector
+  and scalar tails. Images with RGB tRNS retain the scalar transparency conversion.
+- Accumulate ARM Adler byte columns over 64-byte blocks, applying position
+  weights once per 2,048-byte chunk. Inputs below 512 bytes retain the old kernel.
+
+The [first full comparison](https://github.com/bojosos/libpng_turbo/actions/runs/36750793304)
+found a 5.2% Linux x64 gray-decode loss and a 3.1% Windows ARM flat-RGBA16 loss.
+Simplifying literal classification restored GCC's literal-table pointer to a
+register, removed repeated stack loads, placed all four literal steps together,
+and reduced the inflater by 60 bytes. The final gray-decode ratio was 1.021x;
+Windows ARM flat RGBA16 was 1.021x. These measurements do not isolate the separate
+effects of register allocation, branch count and code placement.
+
+The [isolated ARM checksum comparison](https://github.com/bojosos/libpng_turbo/actions/runs/36751990697)
+tested `b9588ea` against `b3ce4f8`. Linux ARM noise decode improved 1.069x,
+RGB graphics 1.186x and native palette graphics 1.446x. x64 controls remained
+near parity. The new checksum uses baseline NEON instructions.
+
+The [final full comparison](https://github.com/bojosos/libpng_turbo/actions/runs/36752507940)
+uses nine alternating one-second pairs for 22 workloads on each of five
+platforms. Linux and Windows use one pinned logical CPU; macOS remains OS
+scheduled. The table shows median candidate/baseline throughput ratios.
+Every pair has matching input, decoded and encoded sizes.
+
+| Platform | Noise decode | Noise encode | RGB graphics to RGBA8 | RGBA16 photo decode |
+| --- | ---: | ---: | ---: | ---: |
+| Linux x64 | 1.000x | 1.074x | 1.011x | 1.119x |
+| Windows x64 | 1.159x | 1.086x | 1.009x | 1.139x |
+| Linux ARM64 | 1.066x | 1.178x | 1.648x | 1.115x |
+| macOS ARM64 | 1.142x | 1.213x | 1.516x | 1.144x |
+| Windows ARM64 | 1.115x | 1.467x | 1.463x | 1.131x |
+
+macOS ratios vary more: its RGB-graphics conversion pairs ranged 1.371–1.758x.
+Linux x64 noise encoding ranged 0.988–1.316x, so its 7.4% median gain is less
+precise than Windows x64's 8.6% gain, whose pairs ranged 1.077–1.125x.
+
+A [focused repeat](https://github.com/bojosos/libpng_turbo/actions/runs/36753863588)
+checked RGB/RGBA photos and noise. Linux x64 noise encode measured 1.157x,
+while RGB photo encode retained a small loss: 0.987x, with all nine pairs
+between 0.981–0.997x. The full run had measured 0.975x. Windows RGB photo encode
+was 1.002x, Linux ARM 1.019x and Windows ARM 1.022x. GCC's photo compressor loop
+matches the old loop instruction-for-instruction, and these photo inputs never
+call the modified literal-run helper. The cause of the small Linux loss remains
+unresolved; the patch does not improve every workload. Raising the helper's
+threshold would not address a path these images do not execute.
+
+Six decoder literals offered only a small local gain beyond four, and a cached
+root-entry experiment slowed RGB graphics by 3–4% despite helping one photo.
+Both remain excluded from the retained implementation.
+
+Tests cover transparency at vector/tail/row boundaries, literal lengths 0–33,
+both reserved fixed symbols, every truncated prefix, undersized outputs, and
+checksum boundaries across 32 byte alignments. Independent zlib tests passed
+1,496 streams, and local old/new encoder comparisons matched 2,096 streams
+byte-for-byte. All seven [CI jobs](https://github.com/bojosos/libpng_turbo/actions/runs/36752505886)
+passed. The [final sanitizer fuzz campaign](https://github.com/bojosos/libpng_turbo/actions/runs/36752973103)
+completed 3,117,250 executions across decode, inflate and encode on x64/ARM64,
+120 seconds per target, without a reported failure. Three longer campaigns in
+this round completed 8,883,527 executions in total. These bounded campaigns
+and synthetic benchmark images do not establish a fastest-in-the-world claim.
