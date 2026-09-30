@@ -4,6 +4,61 @@ ptpng targets fast single-threaded PNG decoding on x86 AVX2 and ARM64
 NEON. A kernel benchmark measures one operation; it does not establish
 the speed of a complete PNG decode or a lead over every other decoder.
 
+## 30 September benchmark snapshot
+
+Release results from [nightly run 36753946386](https://github.com/bojosos/ptpng/actions/runs/36753946386),
+commit [`86bcf29`](https://github.com/bojosos/ptpng/commit/86bcf29d098473fbe295995f5bb8a9ac1f215d98),
+against libpng + zlib-ng 2.2.4 in ZLIB_COMPAT mode. The Windows x64 runner
+used an AMD EPYC 7763, Windows Server 2025 and four logical CPUs, with OS
+scheduling. Fixtures are generated gradients, graphics and random noise.
+They are 3200x2400, except the two RGBA16 fixtures and `noise_rgba8`, which
+are 1024x768. Checksums and allocations are included; file I/O and freeing
+returned output are excluded.
+
+### Decoder
+
+Native-output timings use the median of 12 alternating rounds after
+warm-up. Both decoders include setup and end-of-file processing; libpng
+uses contiguous output storage. Milliseconds are derived from reported MPix/s.
+
+| Image | ptpng | libpng + zlib-ng | Speedup |
+| --- | ---: | ---: | ---: |
+| photo_rgb8 | 34.04 ms | 46.37 ms | 1.36x |
+| photo_rgba8 | 85.17 ms | 110.93 ms | 1.30x |
+| photo_gray8 | 19.68 ms | 33.63 ms | 1.71x |
+| photo_gray16 | 23.27 ms | 38.31 ms | 1.65x |
+| graphic_pal8 | 2.13 ms | 7.37 ms | 3.46x |
+| graphic_rgb8 | 11.60 ms | 13.19 ms | 1.14x |
+| photo_rgba16_paeth | 28.54 ms | 42.26 ms | 1.48x |
+| graphic_rgba16_paeth | 3.40 ms | 15.30 ms | 4.50x |
+| noise_rgba8 | 11.61 ms | 11.89 ms | 1.02x |
+
+### Encoder
+
+Encoding uses the median of five rotated rounds after verified warm-up.
+Both encoders receive identical pixels; the palette fixture expands to
+RGBA8 for both. The reference uses level 1. Size is ptpng's PNG byte count
+divided by the reference's; below 100% means a smaller file.
+
+| Image | ptpng | libpng + zlib-ng level 1 | Speedup | Size vs reference |
+| --- | ---: | ---: | ---: | ---: |
+| photo_rgb8 | 75.35 ms | 262.96 ms | 3.49x | 96.1% |
+| photo_rgba8 | 172.36 ms | 418.91 ms | 2.43x | 100.7% |
+| photo_gray8 | 42.77 ms | 121.95 ms | 2.85x | 98.5% |
+| photo_gray16 | 54.37 ms | 188.50 ms | 3.47x | 96.3% |
+| graphic_pal8 | 15.24 ms | 171.47 ms | 11.25x | 65.9% |
+| graphic_rgb8 | 12.39 ms | 141.95 ms | 11.46x | 70.7% |
+| photo_rgba16_paeth | 39.93 ms | 131.56 ms | 3.30x | 101.2% |
+| graphic_rgba16_paeth | 3.47 ms | 34.13 ms | 9.84x | 66.8% |
+| noise_rgba8 | 8.26 ms | 71.34 ms | 8.64x | 94.7% |
+
+Level 6 can produce substantially smaller files. See the
+[dashboard](https://bojosos.github.io/ptpng/bench/?mode=encode&platform=windows-x64&image=photo_rgb8&format=none&reference=libpng-zng-level6&metric=size&range=10)
+for those sizes and timings, stock-zlib comparisons and newer measurements.
+The five-platform summary remains in the [README](README.md#performance-30-september-2026).
+Hosted machines can change between runs; these ratios compare engines
+within one run rather than code revisions across different machines.
+
 ## Changes
 
 - AVX2 Sub filtering reconstructs RGB and 16-bit RGB directly into the
