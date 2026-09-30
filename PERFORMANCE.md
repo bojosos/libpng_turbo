@@ -61,7 +61,7 @@ After building Release with CMake, run `build/inf_bench build/many_fixed.z
 
 ## Whole-image and filter benchmarks
 
-Native macOS ARM64 results from [the September 24 nightly run](https://github.com/bojosos/libpng_turbo/actions/runs/36043349483),
+Native macOS ARM64 results from [the September 24 nightly run](https://github.com/bojosos/ptpng/actions/runs/36043349483),
 commit `5079d0e`, generated 3200x2400 images, checksum verification on:
 
 | Native output | ptpng, MPix/s | libpng + zlib-ng, MPix/s | ptpng speedup |
@@ -405,7 +405,7 @@ All seven local tests and 2,096 byte-identical streams checked with zlib passed.
 Nightly benchmarks now include the random RGBA image to track literal-heavy
 workloads alongside the eight existing fixtures.
 
-The first [Linux profiling run](https://github.com/bojosos/libpng_turbo/actions/runs/36060188672)
+The first [Linux profiling run](https://github.com/bojosos/ptpng/actions/runs/36060188672)
 used a Neoverse-N2 ARM64 runner and exposed user hardware counters. Scalar Paeth
 accounted for 44% of RGBA16-photo decode samples and 22% of RGBA8-photo samples;
 inflate took 47% and 63%. Photo encoding spent 75–78% in fixed-Huffman DEFLATE.
@@ -419,7 +419,7 @@ versions with identical flags on the same VM, pins each to one CPU, and runs
 nine alternating timing pairs. Artifacts retain every result, the CPU/compiler
 details, sampled stacks and annotated instructions.
 
-The [paired ARM run](https://github.com/bojosos/libpng_turbo/actions/runs/36061201763)
+The [paired ARM run](https://github.com/bojosos/ptpng/actions/runs/36061201763)
 compared the new NEON Paeth implementation against `f6172e4` on one
 Neoverse-N2 CPU, nine alternating one-second pairs per case:
 
@@ -441,11 +441,11 @@ the fall-through path and moved short literals behind extra jumps. Marking
 long runs unlikely under GCC/Clang restored the photo case to 0.999x
 (0.997–1.004x range), with random RGBA still 1.248x faster
 (1.101–1.483x range). Graphics encoding was 1.000x. This
-[final paired run](https://github.com/bojosos/libpng_turbo/actions/runs/36062061909)
+[final paired run](https://github.com/bojosos/ptpng/actions/runs/36062061909)
 also repeated the ARM gains at 1.555x for RGBA16 photos and 1.944x for
 RGBA16 graphics. Windows keeps the previously measured MSVC code path.
 
-The [expanded differential fuzz campaign](https://github.com/bojosos/libpng_turbo/actions/runs/36061508310)
+The [expanded differential fuzz campaign](https://github.com/bojosos/ptpng/actions/runs/36061508310)
 completed 2,641,561 executions with ASan and UBSan across Linux x64 and ARM64,
 with no reported failures. Each of three targets ran for 120 seconds per
 architecture. Native decoder output is compared with libpng when both accept
@@ -457,10 +457,10 @@ execution counts are not coverage percentages or proof of correctness.
 
 ## Nightly graph audit, September 27
 
-The [September 24 baseline](https://github.com/bojosos/libpng_turbo/actions/runs/36062576710)
-and the scheduled runs on [September 25](https://github.com/bojosos/libpng_turbo/actions/runs/36113326363),
-[September 26](https://github.com/bojosos/libpng_turbo/actions/runs/36229352660), and
-[September 27](https://github.com/bojosos/libpng_turbo/actions/runs/36307712066)
+The [September 24 baseline](https://github.com/bojosos/ptpng/actions/runs/36062576710)
+and the scheduled runs on [September 25](https://github.com/bojosos/ptpng/actions/runs/36113326363),
+[September 26](https://github.com/bojosos/ptpng/actions/runs/36229352660), and
+[September 27](https://github.com/bojosos/ptpng/actions/runs/36307712066)
 all tested unchanged commit `c1c133f`. Each run's 550 decoder and memory-copy
 measurements and 540 encoder measurements exactly match the published graph
 data. Changes between these four points cannot be attributed to code changes.
@@ -500,7 +500,7 @@ and GCC's scalar predictor branches can respond differently to that data.
 Native, paired whole-image measurements are needed to resolve the choice;
 the microbenchmark does not establish a Linux whole-image regression.
 
-The [performance graphs](https://bojosos.github.io/libpng_turbo/bench/) now
+The [performance graphs](https://bojosos.github.io/ptpng/bench/) now
 label measurement dates, show compact CPU details, and link points to their
 Actions runs. Encoder comparisons include speed and file-size ratios against
 both zlib-ng level 1 and level 6, alongside the existing raw charts. Above
@@ -527,7 +527,7 @@ NEON kernel separate from that selection. MSVC retains its original direct
 NEON dispatch: scalar selection made RGBA8 photos faster but slowed the flat
 RGBA16 case, even after restoring the original kernel body behind a wrapper.
 
-The [Linux profile](https://github.com/bojosos/libpng_turbo/actions/runs/36335673907)
+The [Linux profile](https://github.com/bojosos/ptpng/actions/runs/36335673907)
 at `dd1c78a` exposed hardware counters on Neoverse-N2 ARM64 and software timer
 samples on EPYC 7763 x64. Palette-to-RGB conversion accounted for 83.0% and
 84.9% of samples respectively. The revised converter uses the existing packed
@@ -552,14 +552,14 @@ Each paired comparison uses one shared input file, but results across those
 fixtures should not be equated. Future Linux profile artifacts retain the PNGs
 as well as the executable, stacks and annotated instructions.
 
-The final [sanitizer fuzz campaign](https://github.com/bojosos/libpng_turbo/actions/runs/36336235745)
+The final [sanitizer fuzz campaign](https://github.com/bojosos/ptpng/actions/runs/36336235745)
 completed 4,415,223 executions across decode, inflate and encode targets on
 x64/ARM64, 120 seconds per target, with no reported failures. The final
-[CI matrix](https://github.com/bojosos/libpng_turbo/actions/runs/36336218991)
-and [five-platform nightly](https://github.com/bojosos/libpng_turbo/actions/runs/36336232524)
+[CI matrix](https://github.com/bojosos/ptpng/actions/runs/36336218991)
+and [five-platform nightly](https://github.com/bojosos/ptpng/actions/runs/36336232524)
 also passed. These remain bounded campaigns, not proof of correctness.
 
-The [full paired comparison](https://github.com/bojosos/libpng_turbo/actions/runs/36336395808)
+The [full paired comparison](https://github.com/bojosos/ptpng/actions/runs/36336395808)
 tested `8c6940f` against `c1c133f` with nine alternating one-second pairs per
 workload. Each old/new pair ran on the same machine and input; Linux and Windows
 were pinned to one logical CPU, while macOS was OS scheduled. Ratios below are
@@ -579,7 +579,7 @@ was 0.966x (0.962–0.969x pair range), and Windows ARM64 was 0.947x
 Windows case. They prompted a focused follow-up on compiler-specific dispatch
 and loop layout; the broad improvements do not cancel out these losses.
 
-The [focused follow-up](https://github.com/bojosos/libpng_turbo/actions/runs/36337098143)
+The [focused follow-up](https://github.com/bojosos/ptpng/actions/runs/36337098143)
 tested `252da3d` against the same original baseline, nine alternating half-second
 pairs. Retaining GCC's measured four-byte-first loop layout restored flat
 RGBA16 decode to 1.001x (0.995–1.011x). Restoring MSVC's original direct dispatch
@@ -591,7 +591,7 @@ passed after this adjustment.
 
 The final nightly changed x64 runner models again (Linux EPYC 9V45 and Windows
 EPYC 7763) and showed a Linux ARM RGB-graphics dip. A
-[same-machine graphics check](https://github.com/bojosos/libpng_turbo/actions/runs/36337884642)
+[same-machine graphics check](https://github.com/bojosos/ptpng/actions/runs/36337884642)
 at `03dd5f9` found Linux ARM RGB decode at 1.003x (0.981–1.024x), with palette
 RGB conversion still 1.917x faster. macOS palette RGB conversion measured
 1.586x (1.349–1.674x) against the original code, despite its latest nightly
@@ -607,7 +607,7 @@ logical CPU 2, attributed 80.4% of noise-decode samples to `inflate_impl` and
 3.9% to Paeth. Hardware counter collection still requires an elevated VTune
 process on that Windows machine. Profiling timings are not benchmark timings.
 
-The [fresh Linux profiles](https://github.com/bojosos/libpng_turbo/actions/runs/36749760593)
+The [fresh Linux profiles](https://github.com/bojosos/ptpng/actions/runs/36749760593)
 used EPYC 7763 software samples and Neoverse-N2 hardware cycles. The ARM noise
 decode attributed 38.1% of samples to Paeth, 18.2% to Adler and 16.0% to CRC.
 Noise encoding attributed 49.1%/53.3% to literal emission on x64/ARM64.
@@ -628,7 +628,7 @@ The changes preserve pixels, compression decisions and encoded bytes:
 - Accumulate ARM Adler byte columns over 64-byte blocks, applying position
   weights once per 2,048-byte chunk. Inputs below 512 bytes retain the old kernel.
 
-The [first full comparison](https://github.com/bojosos/libpng_turbo/actions/runs/36750793304)
+The [first full comparison](https://github.com/bojosos/ptpng/actions/runs/36750793304)
 found a 5.2% Linux x64 gray-decode loss and a 3.1% Windows ARM flat-RGBA16 loss.
 Simplifying literal classification restored GCC's literal-table pointer to a
 register, removed repeated stack loads, placed all four literal steps together,
@@ -636,12 +636,12 @@ and reduced the inflater by 60 bytes. The final gray-decode ratio was 1.021x;
 Windows ARM flat RGBA16 was 1.021x. These measurements do not isolate the separate
 effects of register allocation, branch count and code placement.
 
-The [isolated ARM checksum comparison](https://github.com/bojosos/libpng_turbo/actions/runs/36751990697)
+The [isolated ARM checksum comparison](https://github.com/bojosos/ptpng/actions/runs/36751990697)
 tested `b9588ea` against `b3ce4f8`. Linux ARM noise decode improved 1.069x,
 RGB graphics 1.186x and native palette graphics 1.446x. x64 controls remained
 near parity. The new checksum uses baseline NEON instructions.
 
-The [final full comparison](https://github.com/bojosos/libpng_turbo/actions/runs/36752507940)
+The [final full comparison](https://github.com/bojosos/ptpng/actions/runs/36752507940)
 uses nine alternating one-second pairs for 22 workloads on each of five
 platforms. Linux and Windows use one pinned logical CPU; macOS remains OS
 scheduled. The table shows median candidate/baseline throughput ratios.
@@ -659,7 +659,7 @@ macOS ratios vary more: its RGB-graphics conversion pairs ranged 1.371–1.758x.
 Linux x64 noise encoding ranged 0.988–1.316x, so its 7.4% median gain is less
 precise than Windows x64's 8.6% gain, whose pairs ranged 1.077–1.125x.
 
-A [focused repeat](https://github.com/bojosos/libpng_turbo/actions/runs/36753863588)
+A [focused repeat](https://github.com/bojosos/ptpng/actions/runs/36753863588)
 checked RGB/RGBA photos and noise. Linux x64 noise encode measured 1.157x,
 while RGB photo encode retained a small loss: 0.987x, with all nine pairs
 between 0.981–0.997x. The full run had measured 0.975x. Windows RGB photo encode
@@ -677,8 +677,8 @@ Tests cover transparency at vector/tail/row boundaries, literal lengths 0–33,
 both reserved fixed symbols, every truncated prefix, undersized outputs, and
 checksum boundaries across 32 byte alignments. Independent zlib tests passed
 1,496 streams, and local old/new encoder comparisons matched 2,096 streams
-byte-for-byte. All seven [CI jobs](https://github.com/bojosos/libpng_turbo/actions/runs/36752505886)
-passed. The [final sanitizer fuzz campaign](https://github.com/bojosos/libpng_turbo/actions/runs/36752973103)
+byte-for-byte. All seven [CI jobs](https://github.com/bojosos/ptpng/actions/runs/36752505886)
+passed. The [final sanitizer fuzz campaign](https://github.com/bojosos/ptpng/actions/runs/36752973103)
 completed 3,117,250 executions across decode, inflate and encode on x64/ARM64,
 120 seconds per target, without a reported failure. Three longer campaigns in
 this round completed 8,883,527 executions in total. These bounded campaigns

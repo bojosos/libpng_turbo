@@ -17,8 +17,8 @@ allocation table; excess metadata is skipped while pixels still decode.
 
 ## Performance (30 September 2026)
 
-The [nightly run](https://github.com/bojosos/libpng_turbo/actions/runs/36753946386)
-at [`86bcf29`](https://github.com/bojosos/libpng_turbo/commit/86bcf29d098473fbe295995f5bb8a9ac1f215d98)
+The [nightly run](https://github.com/bojosos/ptpng/actions/runs/36753946386)
+at [`86bcf29`](https://github.com/bojosos/ptpng/commit/86bcf29d098473fbe295995f5bb8a9ac1f215d98)
 compares Release builds with **libpng + zlib-ng 2.2.4** (ZLIB_COMPAT).
 The fixtures are generated photo-like gradients, flat graphics and random
 noise. They are 3200x2400, except the two RGBA16 fixtures and `noise_rgba8`,
@@ -67,7 +67,7 @@ a smaller file.
 
 Level 6 can produce substantially smaller files. Its timings and sizes,
 along with the stock-zlib comparisons, are on the
-[dark nightly charts](https://bojosos.github.io/libpng_turbo/bench/).
+[dark nightly charts](https://bojosos.github.io/ptpng/bench/).
 
 ### All five platforms
 
@@ -172,7 +172,7 @@ expand to RGBA8 for both encoders in this comparison. Example:
 # Windows: add --cpu 2 before the tag to pin to logical CPU 2.
 ```
 
-Nightly [dark charts](https://bojosos.github.io/libpng_turbo/bench/) show
+Nightly [dark charts](https://bojosos.github.io/ptpng/bench/) show
 within-run decoder ratios first, followed by encoder speed and file-size
 ratios against zlib-ng levels 1 and 6. Points use measurement dates and link
 to their Actions run. Raw results include encoder time/size
