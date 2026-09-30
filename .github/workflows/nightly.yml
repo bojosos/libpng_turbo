@@ -164,6 +164,7 @@ jobs:
         with:
           name: ptpng vs libpng (nightly)
           tool: customBiggerIsBetter
+          ref: ${{ github.sha }}
           output-file-path: bench.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: true
@@ -178,6 +179,7 @@ jobs:
         with:
           name: PNG encoding time and size (nightly)
           tool: customSmallerIsBetter
+          ref: ${{ github.sha }}
           output-file-path: encode.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: true

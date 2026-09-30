@@ -683,3 +683,9 @@ completed 3,117,250 executions across decode, inflate and encode on x64/ARM64,
 120 seconds per target, without a reported failure. Three longer campaigns in
 this round completed 8,883,527 executions in total. These bounded campaigns
 and synthetic benchmark images do not establish a fastest-in-the-world claim.
+
+Chart verification matched all 2,180 values from the two new nightly artifacts.
+It also found that the first run's commit label had advanced from `b3ce4f8` to
+`b9588ea` while the run was in progress. The benchmark action now receives the
+immutable workflow SHA for both histories, and that point's commit metadata was
+corrected. Measurement values and the dark chart page were unchanged.
