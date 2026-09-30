@@ -90,6 +90,15 @@
     const bytes = value => value >= 1048576 ? number(value / 1048576) + ' MiB' :
       value >= 1024 ? number(value / 1024) + ' KiB' : number(value) + ' B';
     const valueText = (record, value) => value === null ? '—' : number(value) + ' ' + record.unit;
+    const sizeDifference = record => {
+      if (record.ptBytes === null) return 'Not recorded';
+      if (record.ptBytes === record.refBytes) return 'Same size';
+      const percent = number(Math.abs(record.ptBytes / record.refBytes - 1) * 100);
+      return (percent === '0' ? 'Less than 0.01' : percent) + '% ' +
+        (record.ptBytes > record.refBytes ? 'larger' : 'smaller');
+    };
+    const sizeClass = record => record.ptBytes === null || record.ptBytes === record.refBytes ? '' :
+      record.ptBytes > record.refBytes ? 'loss' : 'gain';
     const dateText = date => new Date(date).toISOString().slice(0, 16).replace('T', ' ');
     const make = (tag, text, className) => { const element = document.createElement(tag);
       if (text !== undefined) element.textContent = text;
@@ -179,7 +188,7 @@
       const inFormat = onPlatform.filter(record => record.format === state.format);
       state.reference = options('reference', values(inFormat, 'reference'), references, state.reference,
         state.mode === 'encode' ? 'libpng-zng-level1' : 'libpng-zng');
-      const metrics = state.mode === 'encode' ? { speed: 'Speedup', time: 'Encode time', size: 'PNG size' } :
+      const metrics = state.mode === 'encode' ? { speed: 'Speedup', time: 'Encode time', size: 'PNG file size' } :
         state.mode === 'memory' ? { throughput: 'Bandwidth' } : { speed: 'Speedup', throughput: 'Throughput' };
       state.metric = options('metric', Object.keys(metrics), metrics, state.metric, 'speed');
       $('image').disabled = state.mode === 'memory'; $('format').disabled = state.mode !== 'decode'; $('reference').disabled = state.mode === 'memory';
@@ -200,13 +209,15 @@
       } else {
         addStat('Reference', valueText(latest, latest.ref), references[state.reference]);
         addStat('Speedup', number(latest.ratio) + '×', latest.ratio >= 1 ? 'Faster than the reference' : 'Slower than the reference', latest.ratio >= 1 ? 'gain' : 'loss');
-        if (state.mode === 'encode') addStat('PNG size', latest.ptBytes === null ? 'Not recorded' : bytes(latest.ptBytes),
-          latest.ptBytes === null ? 'No size sample for this run' : number(latest.ptBytes / latest.refBytes * 100) + '% of reference bytes');
+        if (state.mode === 'encode') addStat('PNG file size', latest.ptBytes === null ? 'Not recorded' : bytes(latest.ptBytes),
+          latest.ptBytes === null ? 'No size sample for this run' : sizeDifference(latest) +
+            (latest.ptBytes === latest.refBytes ? ' as ' : ' than ') +
+            references[state.reference] + ' · Reference: ' + bytes(latest.refBytes), sizeClass(latest));
         else addStat('Output', formats[state.format], state.image.includes('rgba16') || state.image === 'noise_rgba8' ? '1024 × 768 pixels' : '3200 × 2400 pixels');
       }
       $('trend-title').textContent = images[state.image] || state.image;
       $('chart-caption').textContent = state.metric === 'speed' ? 'Higher is faster. Each ratio compares engines within the same run.' :
-        state.metric === 'size' ? 'Lower is smaller. Both encoders receive identical pixels.' : state.mode === 'encode' ?
+        state.metric === 'size' ? 'Lower is smaller. Compressed PNG file sizes differ; decoded pixels are identical.' : state.mode === 'encode' ?
           'Median milliseconds per image. Lower is faster.' : state.mode === 'memory' ? 'Payload MB/s. Higher is faster.' : 'MPix/s. Higher is faster.';
       $('machine').textContent = cpuSummary(latest.machine) + (latest.machine && latest.machine.logical_cpus ?
         ' · ' + latest.machine.logical_cpus + ' logical CPUs' : '') + ' · ' + dateText(latest.date) + ' UTC';
@@ -216,7 +227,7 @@
       $('case-count').textContent = latestByImage.size + (latestByImage.size === 1 ? ' workload' : ' workloads');
       $('overview-caption').textContent = platforms[state.platform] + (state.mode === 'decode' ? ' · ' + formats[state.format] : '') + ' · ' + references[state.reference];
       const heading = make('tr'); const columns = state.mode === 'memory' ? ['Workload', 'MB/s'] :
-        state.mode === 'encode' ? ['Image', 'ptpng, ms', 'Speedup', 'Size / ref'] : ['Image', 'ptpng, MPix/s', 'Speedup'];
+        state.mode === 'encode' ? ['Image', 'ptpng, ms', 'Speedup', 'File size vs ref'] : ['Image', 'ptpng, MPix/s', 'Speedup'];
       columns.forEach(label => heading.append(make('th', label))); $('overview-head').replaceChildren(heading); $('overview-body').replaceChildren();
       for (const [image, record] of latestByImage) {
         const row = make('tr', undefined, image === state.image ? 'selected' : '');
@@ -226,7 +237,7 @@
           $('overview-body').querySelector('[aria-pressed="true"]').focus({ preventScroll: true }); };
         cell.append(button); row.append(cell, make('td', number(record.pt)));
         if (state.mode !== 'memory') row.append(make('td', number(record.ratio) + '×', record.ratio >= 1 ? 'gain' : 'loss'));
-        if (state.mode === 'encode') row.append(make('td', record.ptBytes === null ? '—' : number(record.ptBytes / record.refBytes * 100) + '%'));
+        if (state.mode === 'encode') row.append(make('td', sizeDifference(record), sizeClass(record)));
         $('overview-body').append(row);
       }
       $('history-body').replaceChildren();
