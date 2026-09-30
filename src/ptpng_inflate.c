@@ -419,27 +419,30 @@ static int inflate_impl(const uint8_t *in, size_t in_len, uint8_t *out,
             REFILL();
             if (pos + 8 <= out_len) {
                 /* Up to four root-table literals share one refill. */
+                /* build_table gives valid literals a nonzero bit count, so
+                 * their entries exceed F_LIT. Reserved symbols are exactly
+                 * F_LIT; matches, EOB and subtable entries are below it. */
                 e = lit_tbl[PEEK32() & (LITLEN_SIZE - 1)];
                 nb = e & 0xF;
-                if ((e & (F_LIT | F_SUB)) == F_LIT && nb != 0) {
+                if (e > F_LIT) {
                     out[pos] = (uint8_t)(e >> 8);
                     bitbuf >>= nb; bitcnt -= nb;
                     e = lit_tbl[PEEK32() & (LITLEN_SIZE - 1)];
                     nb = e & 0xF;
-                    if ((e & (F_LIT | F_SUB)) == F_LIT && nb != 0 &&
+                    if (e > F_LIT &&
                         (unsigned)bitcnt >= nb) {
                         out[pos + 1] = (uint8_t)(e >> 8);
                         bitbuf >>= nb; bitcnt -= nb;
                         pos += 2;
                         e = lit_tbl[PEEK32() & (LITLEN_SIZE - 1)];
                         nb = e & 0xF;
-                        if ((e & (F_LIT | F_SUB)) == F_LIT && nb != 0 &&
+                        if (e > F_LIT &&
                             bitcnt >= (int)nb) {
                             out[pos++] = (uint8_t)(e >> 8);
                             DROP(nb);
                             e = lit_tbl[PEEK32() & (LITLEN_SIZE - 1)];
                             nb = e & 0xF;
-                            if ((e & (F_LIT | F_SUB)) == F_LIT && nb != 0 &&
+                            if (e > F_LIT &&
                                 bitcnt >= (int)nb) {
                                 out[pos++] = (uint8_t)(e >> 8);
                                 DROP(nb);

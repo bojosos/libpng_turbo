@@ -341,7 +341,7 @@ static void test_literal_boundaries(void)
 {
     unsigned len, invalid;
     for (len = 0; len <= 33; len++)
-    for (invalid = 0; invalid <= 1; invalid++) {
+    for (invalid = 0; invalid <= 2; invalid++) {
         unsigned char zs[64] = {0x78,0x01}, expected[33], out[42];
         unsigned bit = 16, i;
         unsigned long a = 1, b = 0;
@@ -353,7 +353,7 @@ static void test_literal_boundaries(void)
             fixed_symbol(zs, &bit, expected[i]);
             a += expected[i]; b += a;
         }
-        if (invalid) fixed_symbol(zs, &bit, 286); /* reserved literal/length */
+        if (invalid) fixed_symbol(zs, &bit, 285 + invalid); /* reserved 286/287 */
         fixed_symbol(zs, &bit, 256);
         n = (bit + 7) / 8;
         be32(zs + n, ((b % 65521) << 16) | (a % 65521));
