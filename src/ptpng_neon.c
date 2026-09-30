@@ -174,10 +174,78 @@ static void ptpng_filter_paeth_neon_dispatch(uint8_t *dst, const uint8_t *src,
 }
 #endif
 
+/* Collect byte columns in independent 16-bit sums, then apply positional
+ * weights once per chunk. A column reaches at most 32*255=8160; the full
+ * weighted sum is at most 255*2048*2049/2, safely below 2^31. Keeping this
+ * separate avoids its register-save overhead for small inputs. */
+#if defined(_MSC_VER)
+__declspec(noinline)
+#else
+__attribute__((noinline))
+#endif
+static uint32_t ptpng_adler32_neon_large(const uint8_t *p, size_t n)
+{
+    static const uint16_t weights[64] = {
+        64,63,62,61,60,59,58,57, 56,55,54,53,52,51,50,49,
+        48,47,46,45,44,43,42,41, 40,39,38,37,36,35,34,33,
+        32,31,30,29,28,27,26,25, 24,23,22,21,20,19,18,17,
+        16,15,14,13,12,11,10,9, 8,7,6,5,4,3,2,1
+    };
+    uint32_t a = 1, b = 0;
+    while (n >= 64) {
+        unsigned chunk = n < 2048 ? (unsigned)n : 2048;
+        unsigned i;
+        uint16x8_t c0 = vdupq_n_u16(0), c1 = c0, c2 = c0, c3 = c0;
+        uint16x8_t c4 = c0, c5 = c0, c6 = c0, c7 = c0;
+        uint32x4_t sums = vdupq_n_u32(0), prior = sums, weighted;
+        chunk &= ~63u;
+        for (i = 0; i < chunk; i += 64) {
+            uint8x16_t d0 = vld1q_u8(p + i), d1 = vld1q_u8(p + i + 16);
+            uint8x16_t d2 = vld1q_u8(p + i + 32), d3 = vld1q_u8(p + i + 48);
+            uint16x8_t total = vaddq_u16(
+                vaddq_u16(vpaddlq_u8(d0), vpaddlq_u8(d1)),
+                vaddq_u16(vpaddlq_u8(d2), vpaddlq_u8(d3)));
+            /* Each earlier byte contributes once per following byte. */
+            prior = vaddq_u32(prior, sums);
+            sums = vpadalq_u16(sums, total);
+            c0 = vaddw_u8(c0, vget_low_u8(d0));
+            c1 = vaddw_u8(c1, vget_high_u8(d0));
+            c2 = vaddw_u8(c2, vget_low_u8(d1));
+            c3 = vaddw_u8(c3, vget_high_u8(d1));
+            c4 = vaddw_u8(c4, vget_low_u8(d2));
+            c5 = vaddw_u8(c5, vget_high_u8(d2));
+            c6 = vaddw_u8(c6, vget_low_u8(d3));
+            c7 = vaddw_u8(c7, vget_high_u8(d3));
+        }
+        weighted = vshlq_n_u32(prior, 6);
+#define ADLER_WEIGHT(C, INDEX) do {                                      \
+            uint16x8_t w = vld1q_u16(weights + (INDEX) * 8);              \
+            weighted = vmlal_u16(weighted, vget_low_u16(C), vget_low_u16(w)); \
+            weighted = vmlal_u16(weighted, vget_high_u16(C), vget_high_u16(w)); \
+        } while (0)
+        ADLER_WEIGHT(c0, 0); ADLER_WEIGHT(c1, 1);
+        ADLER_WEIGHT(c2, 2); ADLER_WEIGHT(c3, 3);
+        ADLER_WEIGHT(c4, 4); ADLER_WEIGHT(c5, 5);
+        ADLER_WEIGHT(c6, 6); ADLER_WEIGHT(c7, 7);
+#undef ADLER_WEIGHT
+        b = (b + chunk * a + vaddvq_u32(weighted)) % 65521u;
+        a = (a + vaddvq_u32(sums)) % 65521u;
+        p += chunk;
+        n -= chunk;
+    }
+    while (n--) {
+        a += *p++;
+        b += a;
+    }
+    return ((b % 65521u) << 16) | (a % 65521u);
+}
+
 /* Modulo reduction every 2048 bytes keeps the weighted sum below 2^31,
  * even for all-255 input. Accumulate four independent sums per vector. */
 static uint32_t ptpng_adler32_neon(const uint8_t *p, size_t n)
 {
+    if (n >= 512)
+        return ptpng_adler32_neon_large(p, n);
     static const uint8_t weight_bytes[16] = {16, 15, 14, 13, 12, 11, 10, 9,
                                             8, 7, 6, 5, 4, 3, 2, 1};
     const uint8x8_t weight_lo = vld1_u8(weight_bytes);
