@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>ptpng benchmarks</title>
+  <link rel="stylesheet" href="dashboard.css">
+  <script src="data.js" defer></script>
+  <script src="dashboard.js" defer></script>
+</head>
+<body>
+  <main class="dashboard">
+    <header class="page-header">
+      <div><div class="eyebrow">Nightly performance</div><h1>ptpng benchmarks<span class="status-dot" aria-hidden="true"></span></h1>
+        <p>Explore decoder speed, encoder speed and compression across five platforms.</p></div>
+      <div class="header-actions"><a id="repository-link">GitHub repository ↗</a><button id="download" type="button">Download results</button>
+        <span id="updated" class="muted"></span></div>
+    </header>
+    <p id="error" role="alert" hidden></p>
+    <section class="controls panel" aria-label="Choose benchmark">
+      <div class="toolbar">
+        <div class="segmented" role="group" aria-label="Operation">
+          <button type="button" data-mode="decode" aria-pressed="true">Decoder</button>
+          <button type="button" data-mode="encode" aria-pressed="false">Encoder</button>
+          <button type="button" data-mode="memory" aria-pressed="false">Memory reference</button>
+        </div>
+        <span class="checksums">Checksums enabled</span>
+      </div>
+      <div class="filters">
+        <label>Platform<select id="platform"></select></label>
+        <label>Image<select id="image"></select></label>
+        <label>Output format<select id="format"></select></label>
+        <label>Compare with<select id="reference"></select></label>
+      </div>
+    </section>
+    <section id="stats" class="stats" aria-label="Latest selected result" aria-live="polite"></section>
+    <div class="results-grid">
+      <section class="panel trend-panel" aria-labelledby="trend-title">
+        <div class="section-heading"><div><div class="eyebrow">Performance over time</div><h2 id="trend-title">Loading measurements…</h2></div>
+          <div class="chart-controls"><label class="compact-label">Metric<select id="metric"></select></label>
+            <label class="compact-label">History<select id="range"><option value="10">Latest 10 runs</option><option value="30">Latest 30 runs</option><option value="all">All runs</option></select></label></div>
+        </div>
+        <p id="chart-caption" class="muted"></p>
+        <div id="chart" class="chart"></div>
+        <div id="legend" class="legend"></div>
+        <p class="muted">Points are spaced by measurement order. Dates are UTC.</p>
+        <div class="run-strip"><span id="machine" class="muted"></span><a id="latest-run" target="_blank" rel="noopener noreferrer">Latest run ↗</a></div>
+        <p id="point-help" class="muted">Hover or focus a point for its date and machine. Open a point to inspect its run.</p>
+      </section>
+      <section class="panel overview" aria-labelledby="overview-title">
+        <div class="section-heading"><div><div class="eyebrow">Choose a workload</div><h2 id="overview-title">Latest results</h2></div><span id="case-count" class="badge"></span></div>
+        <p id="overview-caption" class="muted"></p>
+        <div class="table-wrap"><table><thead id="overview-head"></thead><tbody id="overview-body"></tbody></table></div>
+        <p class="muted table-hint">Select an image to see its history.</p>
+      </section>
+    </div>
+    <details class="panel measurement-details"><summary>Measurement history and machine details</summary>
+      <div class="table-wrap history-wrap"><table><thead><tr><th>Measured, UTC</th><th>Commit</th><th>ptpng</th><th>Reference</th><th>Machine</th><th>Run</th></tr></thead><tbody id="history-body"></tbody></table></div>
+    </details>
+    <details class="panel method-details"><summary>How to read these results</summary>
+      <div class="method-grid">
+        <div><h3>Start with speed ratios</h3><p>Above 1× means ptpng is faster than the reference measured in the same run. The dashed line marks equal speed. File sizes are separate from speed: a smaller PNG can take longer to encode.</p></div>
+        <div><h3>Machines can change</h3><p>Hosted runners are fresh virtual machines. Compare the recorded CPU and runner image before interpreting a change. These ratios do not replace alternating old/new measurements on one machine.</p></div>
+        <div><h3>Timing and fixtures</h3><p>Decoder timings use medians of 12 alternating rounds after warm-up from commit e6f083c onward; earlier runs used best-of-12. Encoding uses five rotated rounds. Allocations and checksums are included; file I/O and freeing returned output are excluded.</p><p>Fixtures contain generated photo-like gradients, graphics and random noise. PNG streams can differ between OSes. Palette inputs expand to RGBA8 for both encoders.</p></div>
+        <div><h3>Memory is a reference</h3><p>Warm-buffer copying measures payload MB/s over a 128 MiB working set. It is not a theoretical PNG limit: decoding reads compressed bytes and also reconstructs pixels and verifies checksums.</p></div>
+      </div>
+    </details>
+    <footer><span id="history-count"></span><a id="view-link">Link to this view</a></footer>
+  </main>
+  <noscript><p>This dashboard needs JavaScript. The full benchmark history is available in <a href="data.js">data.js</a>.</p></noscript>
+</body>
+</html>

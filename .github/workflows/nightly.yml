@@ -54,7 +54,7 @@ jobs:
           python tests/gen_bench16.py
 
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_args }}
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DPTPNG_BUILD_CPP_TESTS=ON ${{ matrix.cmake_args }}
         env:
           CC: ${{ matrix.cc }}
 
@@ -138,6 +138,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - uses: actions/download-artifact@v4
         with:
           path: benches
@@ -170,7 +174,6 @@ jobs:
           auto-push: true
           gh-pages-branch: gh-pages
           benchmark-data-dir-path: bench/
-          max-items-in-chart: 200
           alert-threshold: "120%"
           comment-on-alert: false
           fail-on-alert: false
@@ -185,6 +188,29 @@ jobs:
           auto-push: true
           gh-pages-branch: gh-pages
           benchmark-data-dir-path: bench/
-          max-items-in-chart: 200
           comment-on-alert: false
           fail-on-alert: false
+
+      - name: Check dashboard calculations
+        run: node --test tools/bench/dashboard_test.cjs
+
+      - name: Check lossless history compaction
+        run: python3 -m unittest discover -s tools/bench -p '*_test.py'
+
+      - name: Check out updated benchmark history
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: dashboard-history
+
+      - name: Publish dashboard from the tested source
+        run: |
+          python3 tools/bench/prepare_history.py dashboard-history/bench/data.js
+          cp tools/bench/index.html tools/bench/dashboard.css tools/bench/dashboard.js dashboard-history/bench/
+          git -C dashboard-history add bench/data.js bench/index.html bench/dashboard.css bench/dashboard.js
+          if ! git -C dashboard-history diff --cached --quiet; then
+            git -C dashboard-history -c user.name=github-actions[bot] \
+              -c user.email=41898282+github-actions[bot]@users.noreply.github.com \
+              commit -m "Publish benchmark dashboard"
+            git -C dashboard-history push origin HEAD:gh-pages
+          fi

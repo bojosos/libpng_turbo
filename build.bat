@@ -14,6 +14,7 @@ rem --- core (scalar + SSE2 baseline) ---
 cl %CORE% /c src\ptpng.c         /Fo"build\obj\ptpng.obj"         || exit /b 1
 cl %CORE% /c src\ptpng_inflate.c /Fo"build\obj\ptpng_inflate.obj" || exit /b 1
 cl %CORE% /c src\ptpng_crc.c     /Fo"build\obj\ptpng_crc.obj"     || exit /b 1
+cl %CORE% /c src\ptpng_crc_x86.c /Fo"build\obj\ptpng_crc_x86.obj" || exit /b 1
 cl %CORE% /c src\ptpng_filters.c /Fo"build\obj\ptpng_filters.obj" || exit /b 1
 cl %CORE% /c src\ptpng_encode.c /Fo"build\obj\ptpng_encode.obj" || exit /b 1
 cl %CORE% /c src\ptpng_deflate.c /Fo"build\obj\ptpng_deflate.obj" || exit /b 1
@@ -25,6 +26,7 @@ cl %CORE% /arch:AVX2 /c src\ptpng_encode_avx2.c /Fo"build\obj\ptpng_encode_avx2.
 rem --- tools ---
 set OBJS=build\obj\ptpng.obj build\obj\ptpng_inflate.obj build\obj\ptpng_crc.obj build\obj\ptpng_filters.obj build\obj\ptpng_avx2.obj
 set OBJS=%OBJS% build\obj\ptpng_encode.obj build\obj\ptpng_deflate.obj build\obj\ptpng_encode_avx2.obj
+set OBJS=%OBJS% build\obj\ptpng_crc_x86.obj
 cl %CORE% tools\ptpng_tool.c   /link /nologo /out:build\ptpng_tool.exe   %OBJS% || exit /b 1
 cl %CORE% tools\inflate_test.c /link /nologo /out:build\inflate_test.exe %OBJS% || exit /b 1
 cl %CORE% tools\filters_test.c /link /nologo /out:build\filters_test.exe %OBJS% || exit /b 1

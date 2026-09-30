@@ -137,6 +137,43 @@ expanded to alpha, 16-bit chopped via >>8) and `PTPNG_OUT_RGB8`.
 `ptpng_info` exposes palette, tRNS, gAMA/cHRM/sRGB/sBIT/bKGD/pHYs/tIME,
 hIST, iCCP (decompressed profile), sPLT, eXIf and tEXt/zTXt/iTXt texts.
 
+### C++17 and C++20
+
+Include `ptpng.hpp` and link the same C library. The header-only wrapper
+owns pixels, encoded bytes and ancillary metadata, freeing them automatically.
+Images and encoded buffers are movable; adopting the C buffers adds no pixel
+copies. Typed options select output format, checksum verification and filtering.
+
+```cpp
+#include <ptpng.hpp>
+
+// png_bytes is a std::vector<std::uint8_t> containing a complete PNG.
+auto image = ptpng::decode(png_bytes.data(), png_bytes.size(),
+                           {ptpng::output_format::rgba8});
+auto png = ptpng::encode(image);
+// Use image.data()/image.size() for pixels and png.data()/png.size() for the PNG.
+// Both buffers and image metadata are freed when their owners go out of scope.
+```
+
+`image.layout()` describes the returned pixels; `image.source_info()` exposes
+the original IHDR and ancillary metadata. This distinction matters when
+converting palette or 16-bit input to RGB8/RGBA8. Heap-backed metadata survives
+an image move until its new owner is destroyed or assigned over. Encoding an
+image writes pixels only, without copying its source metadata into the PNG.
+Native palette and packed pixels must first be converted to a supported encoder
+format. Native 16-bit samples stay in PNG big-endian byte order.
+
+Failures throw `ptpng::error`; `what()` gives the message and `code()` returns
+the C error code. Calls still require serialization across threads.
+C++20 also accepts `std::span<const std::uint8_t>` or `std::span<const std::byte>`
+for decoding and borrowed `ptpng::pixel_view` input; owners expose `bytes()` spans.
+For raw pixels, `ptpng::encode(ptpng::pixel_view{data, size, width, height,
+ptpng::color_type::rgb})` accepts optional bit depth and row stride.
+
+With CMake, use `add_subdirectory(ptpng)` and link `ptpng::ptpng` from your
+C++17 or newer target. `-DPTPNG_BUILD_CPP_TESTS=ON` enables C++17/C++20 wrapper
+tests; ordinary C-only builds require no C++ compiler.
+
 ### Encoding
 
 ```c
@@ -172,10 +209,15 @@ expand to RGBA8 for both encoders in this comparison. Example:
 # Windows: add --cpu 2 before the tag to pin to logical CPU 2.
 ```
 
-Nightly [dark charts](https://bojosos.github.io/ptpng/bench/) show
-within-run decoder ratios first, followed by encoder speed and file-size
-ratios against zlib-ng levels 1 and 6. Points use measurement dates and link
-to their Actions run. Raw results include encoder time/size
+The [dark benchmark dashboard](https://bojosos.github.io/ptpng/bench/) shows
+one selected trend and a compact table of the latest workload results.
+Choose decoder, encoder or memory reference, then filter by platform, image,
+output format and reference library. Switch between speed ratios, throughput,
+encode time and PNG size; the encoder includes levels 1 and 6 for both zlib
+and zlib-ng. View the latest 10/30 measurements or the full history. The URL
+preserves these selections for sharing. Points use measurement dates and link
+to their Actions run. Expand measurement details for CPU, OS and runner image,
+or download the complete JSON. Raw results include encoder time/size
 and a measured memory-copy reference. GitHub-hosted jobs use fresh virtual
 machines, so absolute throughput is not directly comparable across runs.
 New benchmark artifacts record the CPU, OS and runner image. Ratios help
@@ -322,5 +364,9 @@ same-CPU comparisons, saved in `paired.md` and `paired.json`.
 `.github/workflows/nightly.yml` runs nightly: the full test matrix,
 then benchmarks ptpng vs **libpng+zlib** and **libpng+zlib-ng** on
 every platform, and pushes the accumulated results to the `gh-pages`
-branch where github-action-benchmark renders per-platform time series
-(each series labeled with the runner's detected CPU features).
+branch. The dashboard source lives in `tools/bench/` and is published after
+the history update. Full measurement history is retained; the dashboard limits
+the visible points without deleting older results.
+Runner metadata is stored once per platform in each history record's `runners`
+map. This removes repeated CPU descriptions from the downloaded data while
+preserving the measurement values, dates, commits and machine details.
