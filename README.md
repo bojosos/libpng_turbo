@@ -120,9 +120,10 @@ encoder input, use PNG big-endian byte order. `NULL` encoder options select
 adaptive filtering; zero-initialized options select the None filter.
 See [ptpng.h](include/ptpng.h) for formats, filters, limits and error codes.
 
-## Performance (30 September 2026)
+## Performance
 
-Release-build speedups against libpng + zlib-ng 2.2.4 from
+Decoder results from 30 September 2026: Release-build speedups against
+libpng + zlib-ng 2.2.4 from
 [run 36753946386](https://github.com/bojosos/ptpng/actions/runs/36753946386),
 commit [`86bcf29`](https://github.com/bojosos/ptpng/commit/86bcf29d098473fbe295995f5bb8a9ac1f215d98):
 
@@ -142,9 +143,12 @@ on the two Windows platforms.
 The encoder changed on 1 October to target level-6 file sizes. The RGB
 photo drops from 9.29 to 5.11 MiB, versus zlib-ng's 5.10 MiB. All five
 platforms produce identical PNG sizes; the nine fixtures are at most
-2.4% larger than zlib-ng level 6. Encoder speed averages 2.13–2.69x
-stock zlib level 6 and 1.05–1.37x zlib-ng, with some slower cases.
-See [encoder sizes and timings](PERFORMANCE.md#1-october-encoder-compression).
+2.4% larger than zlib-ng level 6. The latest encoder averages 2.25–2.98x
+stock zlib level 6 and 1.14–1.52x zlib-ng across the five platforms, with
+some slower cases. Same-machine comparisons show another 14% gain on
+Linux x64 and 7% on Linux ARM64, with byte-identical output.
+See [encoder sizes](PERFORMANCE.md#1-october-encoder-compression) and
+[speed measurements](PERFORMANCE.md#encoder-speed-at-unchanged-sizes).
 Earlier dashboard points use the previous speed-first compressor.
 
 See [per-image times and file sizes](PERFORMANCE.md#30-september-benchmark-snapshot)

@@ -59,8 +59,8 @@ prove correctness for every possible input.
 
 [Linux profiling run 36787310317](https://github.com/bojosos/ptpng/actions/runs/36787310317)
 places 84.76% of RGB-photo encoder samples in the long matcher on x64
-and 86.21% on ARM64. Matcher and hash-chain insertion work are the next
-speed targets. ARM64 exposed hardware counters on Neoverse-N2; x64
+and 86.21% on ARM64. This guided the matching and insertion changes below.
+ARM64 exposed hardware counters on Neoverse-N2; x64
 exposed only software task-clock sampling on EPYC 7763.
 
 The size gap had two independently measured causes. For graphics,
@@ -88,6 +88,60 @@ level 1 uses its fast strategy. The same level number therefore does
 not imply the same parsing or file size. The benchmark builds enable
 zlib-ng's new strategies; its level 6 uses medium parsing. See the
 [vendored configuration](third_party/zlib-ng-2.2.4/deflate.c#L142).
+
+### Encoder speed at unchanged sizes
+
+Commit [`b87fc8a`](https://github.com/bojosos/ptpng/commit/b87fc8a08e0aa89956bc286c2da5744459796491)
+shares one bounded word load between the three- and
+six-byte insertion hashes, simplifies prefix checks, overlaps chain-link
+loads, and avoids rechecking the byte already found by word mismatch
+scanning. Hashes, candidate order, search limits and filter choices stay
+unchanged. Local comparisons verified identical bytes for all nine PNGs
+and 2,100 raw streams against `835042d`; ASan and portable-path tests passed.
+
+[Paired run 36789896078](https://github.com/bojosos/ptpng/actions/runs/36789896078)
+compares both revisions on each machine, pinned to logical CPU 0, with
+nine alternating pairs per workload. Both use `-O3` with profiling symbols.
+All 81 encoder size comparisons per architecture match. These ratios
+measure the code change directly, rather than comparing different nightlies.
+
+| Image | Linux x64 speedup | Linux ARM64 speedup |
+| --- | ---: | ---: |
+| photo_rgb8 | 1.059x | 1.086x |
+| photo_rgba8 | 1.051x | 1.056x |
+| photo_gray8 | 1.041x | 1.001x |
+| photo_gray16 | 1.062x | 1.085x |
+| graphic_pal8 | 1.363x | 1.139x |
+| graphic_rgb8 | 1.359x | 1.137x |
+| photo_rgba16_paeth | 1.025x | 1.022x |
+| graphic_rgba16_paeth | 1.353x | 1.147x |
+| noise_rgba8 | 1.003x | 0.978x |
+
+Geometric mean encoder gains are 1.137x on EPYC 7763 and 1.071x on
+Neoverse-N2. Unchanged decoder control medians range from 0.991x to
+1.002x. A [focused repeat](https://github.com/bojosos/ptpng/actions/runs/36791128817)
+uses 21 alternating pairs with three-second loops. ARM64 noise encoding
+measures 0.988x, with 11/21 pairs below parity and a 0.944–1.055x range.
+Run ordering affects the result, so a small regression remains possible.
+The ARM64 decoder controls stay within 0.03% of parity. The x64 repeat measures
+1.013x on a different runner CPU, EPYC 9V45. All 42 encoder size pairs
+match. Eight CI jobs and another 2,796,780 x64/ARM64 fuzz executions
+passed with no findings.
+
+[Nightly run 36791257328](https://github.com/bojosos/ptpng/actions/runs/36791257328)
+at [`df94a6d`](https://github.com/bojosos/ptpng/commit/df94a6d7851b5cba5d76279c4648effaa9da2c34)
+passed on all five platforms and published the dashboard. All nine PNG
+sizes match the preceding compression revision on every platform.
+These geometric means compare ptpng with each reference within the same
+run; hosted runner changes make comparisons between nightlies unreliable.
+
+| Platform | vs zlib 6 | Faster cases | vs zlib-ng 6 | Faster cases |
+| --- | ---: | ---: | ---: | ---: |
+| Linux x64 | 2.87x | 9/9 | 1.49x | 6/9 |
+| Windows x64 | 2.98x | 9/9 | 1.52x | 6/9 |
+| Linux ARM64 | 2.25x | 8/9 | 1.14x | 4/9 |
+| macOS ARM64 | 2.59x | 9/9 | 1.18x | 4/9 |
+| Windows ARM64 | 2.36x | 9/9 | 1.22x | 4/9 |
 
 ## 30 September benchmark snapshot
 
