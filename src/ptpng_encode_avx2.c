@@ -1,6 +1,26 @@
 /* Forward PNG filters. This translation unit is built with AVX2 enabled. */
 #include "ptpng_internal.h"
 
+uint64_t ptpng_encode_score_avx2(const uint8_t *src, size_t count)
+{
+    __m256i sum = _mm256_setzero_si256();
+    const __m256i zero = _mm256_setzero_si256();
+    uint64_t lanes[4], score;
+    size_t i = 0;
+    for (; count - i >= 32; i += 32) {
+        __m256i bytes = _mm256_loadu_si256((const __m256i *)(src + i));
+        /* abs(-128) has byte value 128, which SAD treats as unsigned. */
+        sum = _mm256_add_epi64(sum, _mm256_sad_epu8(_mm256_abs_epi8(bytes), zero));
+    }
+    _mm256_storeu_si256((__m256i *)lanes, sum);
+    score = lanes[0] + lanes[1] + lanes[2] + lanes[3];
+    for (; i < count; ++i) {
+        unsigned x = src[i];
+        score += x < 128 ? x : 256-x;
+    }
+    return score;
+}
+
 static void encode_tail_avx2(uint8_t *dst, const uint8_t *src,
                              const uint8_t *prev, size_t begin, size_t end,
                              unsigned bpp, int filter)

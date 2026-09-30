@@ -5,6 +5,48 @@
 
 #ifdef PTPNG_TEST_ZLIB
 #include <zlib.h>
+
+/* Common PNG residuals have a small alphabet or long flat runs. Compare
+ * compression quality as well as round trips: fixed codes alone miss both. */
+static int check_compression_quality(void)
+{
+    const size_t size = 262144;
+    uint8_t *src = (uint8_t *)malloc(size);
+    uint8_t *reference = (uint8_t *)malloc(compressBound((uLong)size));
+    uint32_t state = UINT32_C(0x87ad130f);
+    unsigned mode;
+    if (!src || !reference) { free(src); free(reference); return 1; }
+    for (mode = 0; mode < 3; ++mode) {
+        uint8_t *encoded = NULL;
+        size_t encoded_size = 0, i;
+        uLongf reference_size = compressBound((uLong)size);
+        for (i = 0; i < size; ++i) {
+            state ^= state << 13; state ^= state >> 17; state ^= state << 5;
+            src[i] = mode == 0 ? 0 : mode == 1 ? (uint8_t)(state & 3) :
+                i < size/2 ? (uint8_t)(state & 3) : (uint8_t)state;
+        }
+        if (compress2(reference, &reference_size, src, (uLong)size, 6) != Z_OK ||
+            ptpng_deflate(src, size, &encoded, &encoded_size) != PTPNG_OK ||
+            encoded_size > (size_t)reference_size * 11 / 10 + 16) {
+            fprintf(stderr, "compression quality pattern=%u: ptpng=%zu zlib6=%lu "
+                    "(limit: reference + 10%% + 16 bytes)\n", mode, encoded_size,
+                    (unsigned long)reference_size);
+            free(encoded); free(reference); free(src); return 1;
+        }
+        printf("compression quality pattern=%u: %zu vs %lu bytes\n", mode,
+               encoded_size, (unsigned long)reference_size);
+        {
+            uLongf decoded_size = (uLongf)size;
+            if (uncompress(reference, &decoded_size, encoded, (uLong)encoded_size) != Z_OK ||
+                decoded_size != size || memcmp(reference, src, size)) {
+                fprintf(stderr, "compression quality round trip failed, pattern=%u\n", mode);
+                free(encoded); free(reference); free(src); return 1;
+            }
+        }
+        free(encoded);
+    }
+    free(reference); free(src); return 0;
+}
 #endif
 
 static uint32_t random_state = UINT32_C(0x592182a);
@@ -98,7 +140,8 @@ int main(int argc, char **argv)
     static const size_t boundaries[] = {
         63,64,65,127,128,129,255,256,257,258,259,260,
         1023,1024,1025,32767,32768,32769,65534,65535,65536,65537,
-        131069,131070,131071,131072,131073,1048576
+        131069,131070,131071,131072,131073,
+        1048575,1048576,1048577,1048834,2097153
     };
     unsigned long iterations = 1000, i;
     unsigned mode, count = 0;
@@ -117,6 +160,9 @@ int main(int argc, char **argv)
         }
     }
     ptpng_cpu_init();
+#ifdef PTPNG_TEST_ZLIB
+    if (check_compression_quality()) return 1;
+#endif
     if (ptpng_deflate(&dummy, SIZE_MAX, &output, &output_size) !=
         PTPNG_E_TOO_LARGE || output != NULL || output_size != 0) {
         fprintf(stderr, "overflow must fail before reading input and clear output\n");

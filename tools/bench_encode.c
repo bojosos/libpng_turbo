@@ -1,10 +1,12 @@
 /* Encode identical decoded pixels; report median latency AND output size.
- * Usage: bench_encode [--cpu N] <tag> <out.json> <input.png> [...]
+ * Usage: bench_encode [--cpu N] [--diagnose] <tag> <out.json> <input.png> [...]
  * JSON uses github-action-benchmark customSmallerIsBetter (ms and bytes).
  * Five timed encodes, excluding output free, after a verified warm-up.
  */
 #include "ptpng.h"
+#include "ptpng_internal.h"
 #include "png.h"
+#include <zlib.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -150,10 +152,75 @@ static const char *basename_portable(const char *p)
     return a ? a + 1 : p;
 }
 
+/* Feed exactly the same filtered bytes to each compressor, separating
+ * filter selection from match parsing and Huffman coding. Diagnostic
+ * encodes are outside timed rounds and are never published as timings. */
+static int diagnose(const void *png, size_t n, const ptpng_info *im,
+                    const char *method)
+{
+    const unsigned char *p = (const unsigned char *)png;
+    size_t pos = 8, idat_size = 0, raw_size = (im->rowbytes + 1) * im->height;
+    unsigned char *idat = (unsigned char *)malloc(n);
+    unsigned char *raw = (unsigned char *)malloc(raw_size);
+    unsigned char *ref = NULL, *encoded = NULL;
+    size_t encoded_size = 0;
+    uLongf decoded_size = (uLongf)raw_size, ref_size;
+    unsigned filters[5] = {0,0,0,0,0}, y;
+    int level, ok = 0;
+    if (!idat || !raw) goto done;
+    while (pos <= n && n - pos >= 12) {
+        size_t length = (size_t)p[pos] << 24 | (size_t)p[pos+1] << 16 |
+                        (size_t)p[pos+2] << 8 | p[pos+3];
+        if (length > n - pos - 12) goto done;
+        if (!memcmp(p + pos + 4, "IDAT", 4)) {
+            memcpy(idat + idat_size, p + pos + 8, length);
+            idat_size += length;
+        }
+        pos += length + 12;
+    }
+    if (pos != n || uncompress(raw, &decoded_size, idat, (uLong)idat_size) != Z_OK ||
+        decoded_size != raw_size) goto done;
+    for (y = 0; y < im->height; ++y) {
+        unsigned filter = raw[(im->rowbytes + 1) * y];
+        if (filter > 4) goto done;
+        ++filters[filter];
+    }
+    printf("  %s filters: None=%u Sub=%u Up=%u Average=%u Paeth=%u\n", method,
+           filters[0], filters[1], filters[2], filters[3], filters[4]);
+    if (ptpng_deflate(raw, raw_size, &encoded, &encoded_size) != PTPNG_OK) goto done;
+    printf("  Identical filtered bytes (%zu raw): ptpng=%zu", raw_size, encoded_size);
+    ref = (unsigned char *)malloc(compressBound((uLong)raw_size));
+    if (!ref) goto done;
+    for (level = 1; level <= 6; level += 5) {
+        ref_size = compressBound((uLong)raw_size);
+        if (compress2(ref, &ref_size, raw, (uLong)raw_size, level) != Z_OK) goto done;
+        printf(" %s-level%d(default)=%lu", REF_LABEL, level, (unsigned long)ref_size);
+    }
+    {
+        z_stream stream;
+        int rc;
+        memset(&stream, 0, sizeof(stream));
+        /* libpng uses Z_FILTERED for the adaptive filtering measured here. */
+        if (deflateInit2(&stream, 6, Z_DEFLATED, 15, 8, Z_FILTERED) != Z_OK) goto done;
+        stream.next_in = raw; stream.avail_in = (uInt)raw_size;
+        stream.next_out = ref; stream.avail_out = (uInt)compressBound((uLong)raw_size);
+        rc = deflate(&stream, Z_FINISH);
+        ref_size = stream.total_out;
+        deflateEnd(&stream);
+        if (rc != Z_STREAM_END) goto done;
+        printf(" %s-level6(filtered)=%lu", REF_LABEL, (unsigned long)ref_size);
+    }
+    printf(" bytes\n");
+    ok = 1;
+done:
+    free(ref); free(encoded); free(raw); free(idat);
+    return ok;
+}
+
 int main(int argc, char **argv)
 {
     static const char *methods[] = {"ptpng-vs-" REF_LABEL, REF_LABEL "-level1", REF_LABEL "-level6"};
-    int first = 1, start = 1, arg, status = 0;
+    int first = 1, start = 1, arg, status = 0, diagnostic = 0;
     FILE *json;
     const char *tag;
     if (argc > 2 && !strcmp(argv[1], "--cpu")) {
@@ -173,15 +240,20 @@ int main(int argc, char **argv)
 #endif
         start = 3;
     }
+    if (argc > start && !strcmp(argv[start], "--diagnose")) {
+        diagnostic = 1;
+        ++start;
+    }
     if (argc < start + 3) {
-        fprintf(stderr, "usage: bench_encode [--cpu N] <tag> <out.json> <img...>\n");
+        fprintf(stderr, "usage: bench_encode [--cpu N] [--diagnose] <tag> <out.json> <img...>\n");
         return 2;
     }
     tag = argv[start];
     json = fopen(argv[start + 1], "w");
     if (!json) { perror(argv[start + 1]); return 2; }
     fprintf(json, "[\n");
-    printf("Encoder: five samples, median; checksums enabled; output free excluded\n");
+    printf(diagnostic ? "Encoder compression diagnosis; checksums enabled\n" :
+           "Encoder: five samples, median; checksums enabled; output free excluded\n");
     for (arg = start + 2; arg < argc; arg++) {
         size_t input_n = 0, size = 0, encoded_n[3] = {0,0,0};
         void *input = read_file(argv[arg], &input_n), *pixels = NULL;
@@ -211,7 +283,14 @@ int main(int argc, char **argv)
             fflush(stdout);
             if (!encode_one(pixels, size, &im, m, &out, &encoded_n[m]) ||
                 !verify(out, encoded_n[m], pixels, size, &im)) failed = 1;
+            else if (diagnostic && m != 1 && !diagnose(out, encoded_n[m], &im, methods[m]))
+                failed = 1;
             ptpng_free(out);
+        }
+        if (diagnostic) {
+            if (failed) { fprintf(stderr, "compression diagnosis failed\n"); status = 1; }
+            ptpng_free(pixels); ptpng_info_free(&im); fflush(stdout);
+            continue;
         }
         /* Rotate order to distribute clock and temperature drift across encoders. */
         for (round = 0; round < 5 && !failed; round++) for (m = 0; m < 3; m++) {

@@ -1,8 +1,68 @@
-# Performance work, September 2026
+# Performance work, September–October 2026
 
 ptpng targets fast single-threaded PNG decoding on x86 AVX2 and ARM64
 NEON. A kernel benchmark measures one operation; it does not establish
 the speed of a complete PNG decode or a lead over every other decoder.
+
+## 1 October encoder compression
+
+The default encoder now scores every byte in each row, using AVX2/NEON
+filters and 64-bit residual scores. It selects dynamic, fixed or stored
+DEFLATE blocks by bit cost, searches bounded match chains with lazy
+lookahead, and accepts short matches only when they have an estimated
+bit saving. It keeps the C/C++ interfaces and has no runtime dependency
+on zlib. Compression state uses 896 KiB per call, plus image buffers.
+
+The previous encoder used sampled filters, one match candidate and fixed
+Huffman codes. On the same RGB fixture it wrote 9,739,624 bytes; the new
+encoder writes 5,357,962, a 45.0% reduction. The graphics fixture drops
+from 164,858 to 34,035 bytes, a 79.4% reduction. Pixels are unchanged.
+
+Local Release measurements on the i7-1355U, pinned to P logical CPU 2,
+use five rotated rounds after independently verified warm-up. All nine
+cases are faster than stock zlib level 6. Against zlib-ng level 6,
+five cases win and four lose; the sizes are at most 2.4% larger. Speed
+ratios below use each reference's own run, not cross-run timings.
+Positive size differences mean a larger ptpng PNG. Palette inputs
+expand to RGBA8 for both encoders.
+
+| Image | PNG bytes | Size vs zlib 6 | Size vs zlib-ng 6 | Speed vs zlib 6 | Speed vs zlib-ng 6 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| photo_rgb8 | 5,357,962 | -7.80% | +0.14% | 1.62x | 0.76x |
+| photo_rgba8 | 11,738,487 | -8.84% | +0.87% | 4.73x | 1.09x |
+| photo_gray8 | 3,131,667 | -0.12% | -6.72% | 7.84x | 0.83x |
+| photo_gray16 | 3,832,479 | -1.48% | +1.83% | 1.52x | 0.87x |
+| graphic_pal8 | 42,332 | +1.92% | +2.26% | 2.82x | 1.95x |
+| graphic_rgb8 | 34,035 | +1.73% | +2.36% | 2.94x | 2.51x |
+| photo_rgba16_paeth | 4,963,843 | -1.09% | +0.81% | 1.39x | 0.89x |
+| graphic_rgba16_paeth | 9,661 | +1.51% | +1.93% | 2.90x | 1.85x |
+| noise_rgba8 | 3,146,840 | -0.17% | -0.17% | 1.17x | 1.21x |
+
+The size gap had two independently measured causes. For graphics,
+stock zlib level 6 compressed the old sampled-filter data to 45,285
+bytes, versus 33,331 with full-row filters. Applying the old ptpng
+compressor to those same streams still took 164,801 and 156,097 bytes:
+most of the remaining gap came from the match parser and fixed codes.
+These raw comparisons used zlib's default strategy; the PNG reference
+uses its filtered strategy. To reproduce the diagnostic:
+
+```sh
+./build/bench_encode --diagnose local diagnosis.json tests/bench/photo_rgb8.png
+```
+
+The raw compressor regression now compares flat, small-alphabet and
+changing-entropy streams with zlib level 6. Boundary/random tests decode
+1,528 streams with both ptpng and zlib; 628 ASan cases and 628 forced
+portable-path cases passed locally. A focused 10,000-case screening
+checked Huffman length limits, complete Kraft sums and prefix uniqueness.
+The fourth coverage-guided fuzz target tests raw compression against
+zlib on x64/ARM64, including 2 MiB inputs and entropy/block changes.
+
+zlib-ng level 1 uses its quick strategy by default, while stock zlib
+level 1 uses its fast strategy. The same level number therefore does
+not imply the same parsing or file size. The benchmark builds enable
+zlib-ng's new strategies; its level 6 uses medium parsing. See the
+[vendored configuration](third_party/zlib-ng-2.2.4/deflate.c#L142).
 
 ## 30 September benchmark snapshot
 
@@ -34,6 +94,10 @@ uses contiguous output storage. Milliseconds are derived from reported MPix/s.
 | noise_rgba8 | 11.61 ms | 11.89 ms | 1.02x |
 
 ### Encoder
+
+This snapshot uses the previous speed-first encoder. From 1 October,
+the default encoder uses full-row filters, dynamic Huffman blocks and
+deeper match parsing; speed and file sizes are therefore different.
 
 Encoding uses the median of five rotated rounds after verified warm-up.
 Both encoders receive identical pixels; the palette fixture expands to

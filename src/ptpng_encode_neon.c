@@ -3,6 +3,25 @@
 
 #if PTPNG_ARM_NEON
 
+uint64_t ptpng_encode_score_neon(const uint8_t *src, size_t count)
+{
+    uint64x2_t sum = vdupq_n_u64(0);
+    uint64_t score;
+    size_t i = 0;
+    for (; count - i >= 16; i += 16) {
+        uint8x16_t magnitude = vreinterpretq_u8_s8(vabsq_s8(
+            vreinterpretq_s8_u8(vld1q_u8(src + i))));
+        /* Widen all the way to 64 bits: very wide rows can overflow 32 bits. */
+        sum = vaddq_u64(sum, vpaddlq_u32(vpaddlq_u16(vpaddlq_u8(magnitude))));
+    }
+    score = vgetq_lane_u64(sum, 0) + vgetq_lane_u64(sum, 1);
+    for (; i < count; ++i) {
+        unsigned x = src[i];
+        score += x < 128 ? x : 256-x;
+    }
+    return score;
+}
+
 static void encode_tail_neon(uint8_t *dst, const uint8_t *src,
                              const uint8_t *prev, size_t begin, size_t end,
                              unsigned bpp, int filter)

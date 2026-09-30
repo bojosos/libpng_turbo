@@ -10,8 +10,8 @@ C++17/20 wrapper and no external runtime dependencies.
 | Output | Native pixels, RGB8 or RGBA8 |
 | Acceleration | Runtime-dispatched AVX2/SSE2 on x86; NEON on ARM64 |
 
-The encoder favors speed over file size. It writes non-interlaced PNGs
-without palette, packed-sample or metadata support.
+The encoder uses full-row adaptive filters and dynamic DEFLATE blocks.
+It writes non-interlaced PNGs without palette, packed-sample or metadata support.
 Library calls must be serialized across threads because internal tables
 and dispatch state are shared.
 
@@ -126,19 +126,25 @@ Release-build speedups against libpng + zlib-ng 2.2.4 from
 [run 36753946386](https://github.com/bojosos/ptpng/actions/runs/36753946386),
 commit [`86bcf29`](https://github.com/bojosos/ptpng/commit/86bcf29d098473fbe295995f5bb8a9ac1f215d98):
 
-| Platform | Decoder speedup | Faster decoder cases | Encoder speedup |
-| --- | ---: | ---: | ---: |
-| Linux x64 | 1.80x | 27/27 | 5.99x |
-| Windows x64 | 1.64x | 26/27 | 5.25x |
-| Linux ARM64 | 1.59x | 27/27 | 5.20x |
-| macOS ARM64 | 1.62x | 27/27 | 5.99x |
-| Windows ARM64 | 1.46x | 26/27 | 5.14x |
+| Platform | Decoder speedup | Faster decoder cases |
+| --- | ---: | ---: |
+| Linux x64 | 1.80x | 27/27 |
+| Windows x64 | 1.64x | 26/27 |
+| Linux ARM64 | 1.59x | 27/27 |
+| macOS ARM64 | 1.62x | 27/27 |
+| Windows ARM64 | 1.46x | 26/27 |
 
-Speedups are geometric means across nine generated fixtures: 27 decoder
-cases in native/RGB8/RGBA8 output and nine encoder cases against level 1.
-Checksums and allocations are included. Decoder timings use 12 alternating
-rounds; encoder timings use five rotated rounds, both taking medians after
-warm-up. The decoder loses on noise-to-RGB8 on the two Windows platforms.
+Speedups are geometric means across 27 decoder cases in native/RGB8/RGBA8
+output. Checksums and allocations are included. Timings use medians of
+12 alternating rounds after warm-up. The decoder loses on noise-to-RGB8
+on the two Windows platforms.
+
+The encoder changed on 1 October to target level-6 file sizes. Local
+tests reduce the RGB photo from 9.29 to 5.11 MiB, versus zlib-ng's 5.10 MiB;
+all nine fixtures are at most 2.4% larger than zlib-ng level 6. It beats
+stock zlib level 6 in all nine local timings, and zlib-ng in five.
+See [encoder sizes and timings](PERFORMANCE.md#1-october-encoder-compression).
+Earlier dashboard points use the previous speed-first compressor.
 
 See [per-image times and file sizes](PERFORMANCE.md#30-september-benchmark-snapshot)
 or the [live dashboard](https://bojosos.github.io/ptpng/bench/) for all
@@ -157,7 +163,8 @@ also run ASan/UBSan. The corpus includes 104 libpng images and 205 generated
 PNGs covering color types, depths, interlacing, filters and metadata.
 
 - [Coverage fuzzing](.github/workflows/fuzz.yml) checks decode against libpng,
-  inflate against zlib and encoder round trips. It caches discoveries and
+  inflate and raw DEFLATE against zlib, and PNG encoder round trips. Raw
+  compressor inputs cover up to 2 MiB. It caches discoveries and
   uploads logs, corpora and crashes from x64/ARM64 runs.
 - [Paired performance](.github/workflows/compare.yml) compares a baseline
   commit with the current revision on all five platforms.

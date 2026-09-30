@@ -1,4 +1,4 @@
-"""Build persistent seed directories for the three libFuzzer targets.
+"""Build persistent seed directories for the four libFuzzer targets.
 
 Usage: python tools/prepare_fuzz_corpus.py --output build/fuzz-corpus
 Additional --png-root paths replace the default tests/gen and third_party roots.
@@ -13,6 +13,7 @@ import zlib
 
 
 LIMIT = 1 << 20
+DEFLATE_LIMIT = 2 << 20
 
 
 def save(directory, data):
@@ -108,6 +109,39 @@ def metadata_seeds():
         yield image(chunks + compressed_text + splt16)
 
 
+def deflate_seeds():
+    """Raw compressor inputs, independent of the encoder's 64 KiB pixel cap."""
+    rng = random.Random(0xDEF1A7E)
+    for length in (0, 1, 2, 3, 4, 15, 16, 17, 257, 258, 259,
+                   32767, 32768, 32769, 65535, 65536, 65537):
+        yield f"zeros-{length}", bytes(length)
+    yield "alphabet4", bytes(rng.randrange(4) for _ in range(65536))
+    yield "entropy-skew", bytes(rng.randrange(256) if rng.randrange(16) == 0 else 0
+                                for _ in range(131072))
+    yield "literal-noise", rng.randbytes(131073)
+    yield "all-literals", bytes(range(256)) * 259
+    # The repeated random prefix can match only at the requested distance.
+    # 32769 tests eviction rather than permitting an out-of-window match.
+    for distance in (32767, 32768, 32769, 65535, 65536, 65537):
+        prefix = rng.randbytes(distance)
+        yield f"distance-{distance}", prefix + prefix[:258] + b"tail"
+    pattern = rng.randbytes(258)
+    yield "max-match-258", pattern * 513
+    window = rng.randbytes(32768)
+    yield "history-wraps", window * 5 + window[:259]
+    # Alternate token distributions in one stream and across the 1 MiB raw
+    # block boundary, including an exactly full and a one-byte trailing block.
+    quarter = bytes(1 << 18)
+    noise = rng.randbytes(1 << 18)
+    alphabet = bytes(rng.randrange(4) for _ in range(1 << 18))
+    changing = quarter + noise + alphabet + bytes(range(256)) * 1024
+    yield "entropy-changes", changing
+    yield "block-plus-one", changing + b"x"
+    yield "two-blocks", changing + noise + quarter + alphabet + noise
+    yield "zeros-two-blocks", bytes(DEFLATE_LIMIT)
+    yield "noise-two-blocks", rng.randbytes(DEFLATE_LIMIT)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
@@ -115,11 +149,13 @@ def main():
     args = parser.parse_args()
     repo = Path(__file__).resolve().parent.parent
     roots = args.png_root or [repo / "tests/gen", repo / "third_party"]
-    directories = {name: args.output / name for name in ("decode", "inflate", "encode")}
+    directories = {name: args.output / name for name in ("decode", "inflate", "encode", "deflate")}
     for directory in directories.values():
         directory.mkdir(parents=True, exist_ok=True)
     for data in metadata_seeds():
         save(directories["decode"], data)
+    for _, data in deflate_seeds():
+        save(directories["deflate"], data)
     for root in roots:
         for path in sorted(root.rglob("*.png")):
             if path.stat().st_size > LIMIT:

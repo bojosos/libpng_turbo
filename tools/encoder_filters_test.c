@@ -12,6 +12,46 @@ static uint8_t next_byte(void)
     return (uint8_t)rng;
 }
 
+static int check_scores(ptpng_encode_score_fn fn, const char *name)
+{
+    static const size_t lengths[] = {255,256,257,4095,4096,4097,65537};
+    size_t index, offset, i;
+    unsigned pattern;
+    for (index = 0; index < 130 + sizeof(lengths)/sizeof(lengths[0]); ++index) {
+        size_t count = index < 130 ? index : lengths[index-130];
+        for (offset = 0; offset < 32; ++offset) {
+            uint8_t *src = (uint8_t *)malloc(count+offset ? count+offset : 1);
+            if (!src) return 1;
+            for (pattern = 0; pattern < 3; ++pattern) {
+                uint64_t expected = 0;
+                for (i = 0; i < count; ++i) {
+                    unsigned x = pattern == 0 ? 128 : pattern == 1 ? 255 : next_byte();
+                    src[offset+i] = (uint8_t)x;
+                    expected += x < 128 ? x : 256-x;
+                }
+                if (fn(src+offset, count) != expected) {
+                    fprintf(stderr, "%s score mismatch count=%zu alignment=%zu pattern=%u\n",
+                            name, count, offset, pattern);
+                    free(src); return 1;
+                }
+            }
+            free(src);
+        }
+    }
+    {
+        /* 128 * (32 MiB + 1) exceeds UINT32_MAX. */
+        const size_t count = ((size_t)1 << 25) + 1;
+        uint8_t *src = (uint8_t *)malloc(count);
+        int failed;
+        if (!src) return 1;
+        memset(src, 128, count);
+        failed = fn(src, count) != (uint64_t)count * 128;
+        free(src);
+        if (failed) { fprintf(stderr, "%s score overflow\n", name); return 1; }
+    }
+    return 0;
+}
+
 static int paeth_reference(int a, int b, int c)
 {
     int p = a + b - c;
@@ -131,23 +171,28 @@ done:
 int main(void)
 {
     ptpng_encode_filter_fn accelerated = NULL;
+    ptpng_encode_score_fn accelerated_score = NULL;
     const char *name = "scalar";
     ptpng_cpu_init();
 #if PTPNG_X86
     if (ptpng_cpu.avx2) {
         accelerated = ptpng_encode_filter_avx2;
+        accelerated_score = ptpng_encode_score_avx2;
         name = "AVX2";
     }
 #endif
 #if PTPNG_ARM_NEON
     if (ptpng_cpu.neon) {
         accelerated = ptpng_encode_filter_neon;
+        accelerated_score = ptpng_encode_score_neon;
         name = "NEON";
     }
 #endif
     if (check_rows(ptpng_encode_filter_scalar, "scalar") ||
         check_paeth(ptpng_encode_filter_scalar, "scalar")) return 1;
     if (accelerated && (check_rows(accelerated, name) || check_paeth(accelerated, name))) return 1;
+    if (check_scores(ptpng_encode_score_scalar, "scalar") ||
+        (accelerated_score && check_scores(accelerated_score, name))) return 1;
     printf("Encoder filters passed: scalar%s%s; all Paeth triples and row tails\n",
            accelerated ? " + " : "", accelerated ? name : "");
     return 0;

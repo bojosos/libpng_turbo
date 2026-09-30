@@ -32,7 +32,7 @@ jobs:
           - arch: arm64
             os: ubuntu-24.04-arm
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    timeout-minutes: 55
     env:
       CC: clang
       CXX: clang++
@@ -51,7 +51,7 @@ jobs:
           -DPTPNG_BUILD_BENCH=OFF -DPTPNG_WITH_ZLIB_NG=OFF
 
       - name: Build
-        run: cmake --build build-fuzz --target fuzz_decode fuzz_inflate fuzz_encode --parallel 2
+        run: cmake --build build-fuzz --target fuzz_decode fuzz_inflate fuzz_encode fuzz_deflate --parallel 2
 
       - uses: actions/cache@v4
         with:
@@ -60,7 +60,9 @@ jobs:
           restore-keys: fuzz-v1-${{ matrix.arch }}-
 
       - name: Seed the corpus
-        run: python3 tools/prepare_fuzz_corpus.py --output fuzz-corpus
+        run: |
+          python3 tools/prepare_fuzz_corpus_test.py
+          python3 tools/prepare_fuzz_corpus.py --output fuzz-corpus
 
       - name: Run coverage-guided campaigns
         shell: bash
@@ -69,12 +71,13 @@ jobs:
           set +e
           mkdir -p fuzz-results
           failed=0
-          for target in decode inflate encode; do
+          for target in decode inflate encode deflate; do
             mkdir -p "fuzz-results/$target"
             dictionary=()
             max_len=1048576
             if [ "$target" = decode ]; then dictionary=(-dict=tools/png.dict); fi
             if [ "$target" = encode ]; then max_len=65544; fi
+            if [ "$target" = deflate ]; then max_len=2097152; fi
             ./build-fuzz/fuzz_$target "fuzz-corpus/$target" "${dictionary[@]}" \
               -max_total_time="$FUZZ_SECONDS" -timeout=10 -rss_limit_mb=3072 \
               -max_len="$max_len" -print_final_stats=1 \
@@ -91,10 +94,11 @@ jobs:
           {
             echo '### Coverage-guided fuzzing (${{ matrix.arch }})'
             echo "Budget: $FUZZ_SECONDS seconds per target. Revision: $GITHUB_SHA."
-            echo 'ASan + UBSan; decoder and encoder/libpng, plus inflate/zlib differential checks enabled.'
+            echo 'ASan + UBSan; decoder and encoder/libpng, plus inflate and raw deflate/zlib differential checks enabled.'
+            echo 'Raw deflate accepts 0–2 MiB and checks exact round trips, full stream consumption, and the stored-size bound.'
             echo 'Crash inputs, logs, and the accumulated corpus are attached as artifacts.'
             echo 'These bounded campaigns do not prove that all bugs or branches are covered.'
-            for target in decode inflate encode; do
+            for target in decode inflate encode deflate; do
               echo "#### $target"
               echo '```text'
               if [ -f "fuzz-results/$target.log" ]; then tail -n 12 "fuzz-results/$target.log"; fi

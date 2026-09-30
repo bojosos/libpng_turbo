@@ -128,7 +128,7 @@ if(PTPNG_BUILD_FUZZERS)
     target_compile_options(ptpng PRIVATE -fsanitize=fuzzer-no-link,address,undefined
                                          -fno-omit-frame-pointer)
     target_link_options(ptpng INTERFACE -fsanitize=address,undefined)
-    foreach(tgt fuzz_decode fuzz_inflate fuzz_encode)
+    foreach(tgt fuzz_decode fuzz_inflate fuzz_encode fuzz_deflate)
         add_executable(${tgt} tools/${tgt}.c)
         target_link_libraries(${tgt} PRIVATE ptpng)
         target_compile_options(${tgt} PRIVATE -fsanitize=fuzzer,address,undefined
@@ -136,6 +136,7 @@ if(PTPNG_BUILD_FUZZERS)
         target_link_options(${tgt} PRIVATE -fsanitize=fuzzer,address,undefined)
     endforeach()
     target_include_directories(fuzz_inflate PRIVATE src)
+    target_include_directories(fuzz_deflate PRIVATE src)
 endif()
 
 # ---- reference build (zlib + libpng) and parity/bench tools ------------
@@ -224,9 +225,11 @@ if(PTPNG_WITH_LIBPNG)
         target_link_libraries(fuzz_decode PRIVATE png_static)
         target_compile_definitions(fuzz_encode PRIVATE PTPNG_FUZZ_LIBPNG)
         target_link_libraries(fuzz_encode PRIVATE png_static)
-        target_compile_definitions(fuzz_inflate PRIVATE PTPNG_FUZZ_ZLIB)
-        target_include_directories(fuzz_inflate PRIVATE ${ZBUILD}/inst/include)
-        target_link_libraries(fuzz_inflate PRIVATE ${PTPNG_ZLIB_LIB})
+        foreach(tgt fuzz_inflate fuzz_deflate)
+            target_compile_definitions(${tgt} PRIVATE PTPNG_FUZZ_ZLIB)
+            target_include_directories(${tgt} PRIVATE ${ZBUILD}/inst/include)
+            target_link_libraries(${tgt} PRIVATE ${PTPNG_ZLIB_LIB})
+        endforeach()
     endif()
 
     # All targets inherit the same MSVC runtime selection.
@@ -246,6 +249,9 @@ if(PTPNG_WITH_LIBPNG)
             target_compile_options(${tgt} PRIVATE -Wall -Wextra)
         endif()
     endforeach()
+    if(TARGET bench_encode)
+        target_include_directories(bench_encode PRIVATE src ${ZBUILD}/inst/include)
+    endif()
 
     add_test(NAME parity COMMAND verify_suite
              ${CMAKE_CURRENT_SOURCE_DIR}/third_party/libpng-libpng16/contrib/testpngs
@@ -355,6 +361,7 @@ if(PTPNG_WITH_LIBPNG)
                             target_compile_options(bench_zlibng PRIVATE -Wall -Wextra)
                         endif()
                         add_executable(bench_encode_zlibng tools/bench_encode.c)
+                        target_include_directories(bench_encode_zlibng PRIVATE src)
                         target_compile_definitions(bench_encode_zlibng PRIVATE REF_LABEL="libpng-zng")
                         target_include_directories(bench_encode_zlibng PRIVATE
                             ${PTPNG_LIBPNG_DIR} ${ZNG}/inst/include ${PNGB})

@@ -22,37 +22,38 @@ void ptpng_encode_filter_scalar(uint8_t *dst, const uint8_t *src,
     }
 }
 
-static unsigned cost(unsigned x)
+uint64_t ptpng_encode_score_scalar(const uint8_t *src, size_t count)
 {
-    x &= 255;
-    return x < 128 ? x : 256-x;
+    uint64_t score = 0;
+    size_t i;
+    for (i = 0; i < count; ++i) {
+        unsigned x = src[i];
+        score += x < 128 ? x : 256-x;
+    }
+    return score;
 }
 
-/* Score at most 192 bytes spread across each row, then run only the
- * selected full-row filter. Sampling trades some compression for speed. */
-static int choose_filter(const uint8_t *src, const uint8_t *prev,
-                         size_t count, unsigned bpp)
+/* Score every residual, including details outside the former sample ranges.
+ * Reuse one scratch row and retain each improving candidate in the output. */
+static int choose_filter(uint8_t *dst, uint8_t *scratch, const uint8_t *src,
+                         const uint8_t *prev, size_t count, unsigned bpp,
+                         ptpng_encode_filter_fn forward, ptpng_encode_score_fn score)
 {
-    unsigned scores[5] = {0,0,0,0,0};
-    size_t ranges = count <= 192 ? 1 : 3;
-    size_t length = count <= 192 ? count : 64;
-    size_t r, j;
+    uint64_t best_score = score(src, count);
     int best = 0, f;
-    for (r = 0; r < ranges; ++r) {
-        size_t start = r == 0 ? 0 : r == 1 ? (count-64)/2 : count-64;
-        for (j = start; j < start + length; ++j) {
-            unsigned x = src[j], a = j >= bpp ? src[j-bpp] : 0;
-            unsigned b = prev ? prev[j] : 0;
-            unsigned c = prev && j >= bpp ? prev[j-bpp] : 0;
-            scores[0] += cost(x);
-            scores[1] += cost(x-a);
-            scores[2] += cost(x-b);
-            scores[3] += cost(x-(a+b)/2);
-            scores[4] += cost(x-paeth(a,b,c));
+    memcpy(dst, src, count);
+    for (f = 1; f < 5 && best_score; ++f) {
+        uint64_t candidate;
+        /* On the first row Up duplicates None and Paeth duplicates Sub. */
+        if (!prev && (f == 2 || f == 4)) continue;
+        forward(scratch, src, prev, count, bpp, f);
+        candidate = score(scratch, count);
+        if (candidate < best_score) {
+            best = f;
+            best_score = candidate;
+            memcpy(dst, scratch, count);
         }
     }
-    for (f = 1; f < 5; ++f)
-        if (scores[f] < scores[best]) best = f;
     return best;
 }
 
@@ -80,12 +81,13 @@ int ptpng_encode(const void *pixels, size_t pixels_size,
     static const uint8_t signature[8] = {137,80,78,71,13,10,26,10};
     const size_t chunk_size = 1u << 20;
     const uint8_t *src = (const uint8_t *)pixels, *prev = NULL;
-    uint8_t *raw, *compressed = NULL, *png, *p, header[13] = {0};
+    uint8_t *raw, *scratch = NULL, *compressed = NULL, *png, *p, header[13] = {0};
     size_t rowbytes, raw_size, compressed_size = 0, total, nchunks, offset;
     unsigned channels, bpp;
     uint32_t y;
     int rc, filter = opts ? opts->filter : PTPNG_ENCODE_FILTER_ADAPTIVE;
     ptpng_encode_filter_fn forward = ptpng_encode_filter_scalar;
+    ptpng_encode_score_fn score = ptpng_encode_score_scalar;
     if (out) *out = NULL;
     if (out_len) *out_len = 0;
     if (!out || !out_len || !pixels || !width || !height ||
@@ -110,21 +112,34 @@ int ptpng_encode(const void *pixels, size_t pixels_size,
     raw_size = (rowbytes+1)*height;
     raw = (uint8_t *)malloc(raw_size);
     if (!raw) return PTPNG_E_OUT_OF_MEMORY;
+    if (filter < 0) {
+        scratch = (uint8_t *)malloc(rowbytes);
+        if (!scratch) { free(raw); return PTPNG_E_OUT_OF_MEMORY; }
+    }
     ptpng_cpu_init();
 #if PTPNG_X86
-    if (ptpng_cpu.avx2) forward = ptpng_encode_filter_avx2;
+    if (ptpng_cpu.avx2) {
+        forward = ptpng_encode_filter_avx2;
+        score = ptpng_encode_score_avx2;
+    }
 #elif PTPNG_ARM_NEON
-    if (ptpng_cpu.neon) forward = ptpng_encode_filter_neon;
+    if (ptpng_cpu.neon) {
+        forward = ptpng_encode_filter_neon;
+        score = ptpng_encode_score_neon;
+    }
 #endif
     for (y = 0; y < height; ++y) {
-        int selected = filter < 0 ? choose_filter(src, prev, rowbytes, bpp) : filter;
+        int selected = filter;
         uint8_t *row = raw+(rowbytes+1)*y;
-        row[0] = (uint8_t)selected;
-        if (!selected) memcpy(row+1, src, rowbytes);
+        if (filter < 0)
+            selected = choose_filter(row+1, scratch, src, prev, rowbytes, bpp, forward, score);
+        else if (!selected) memcpy(row+1, src, rowbytes);
         else forward(row+1, src, prev, rowbytes, bpp, selected);
+        row[0] = (uint8_t)selected;
         prev = src;
         if (y+1 < height) src += stride;
     }
+    free(scratch);
     rc = ptpng_deflate(raw, raw_size, &compressed, &compressed_size);
     free(raw);
     if (rc != PTPNG_OK) return rc;

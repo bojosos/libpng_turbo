@@ -156,7 +156,7 @@ void ptpng_free(void *p);
  * (4), RGBA (6), at 8 or 16 bits. Samples are in PNG byte order (16-bit
  * big-endian). No palette or ancillary metadata is written.
  * stride=0 means tightly packed rows; pixels_size must cover every row.
- * NULL opts selects sampled adaptive filtering. A zero-initialized opts
+ * NULL opts selects full-row adaptive filtering. A zero-initialized opts
  * selects None explicitly. Calls must be serialized like decode calls.
  * On success *out is malloc'd (ptpng_free); on failure *out=NULL and
  * *out_len=0. Both output arguments are required. Filtered input is

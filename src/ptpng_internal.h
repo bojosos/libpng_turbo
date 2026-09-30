@@ -67,13 +67,17 @@ int ptpng_inflate_dyn(const uint8_t *in, size_t in_len, size_t max_out,
 /* Forward filters: disjoint buffers; NULL prev denotes the first row. */
 typedef void (*ptpng_encode_filter_fn)(uint8_t *, const uint8_t *,
                                       const uint8_t *, size_t, unsigned, int);
+typedef uint64_t (*ptpng_encode_score_fn)(const uint8_t *, size_t);
+uint64_t ptpng_encode_score_scalar(const uint8_t *, size_t);
 void ptpng_encode_filter_scalar(uint8_t *, const uint8_t *, const uint8_t *,
                                  size_t, unsigned, int);
 #if PTPNG_X86
+uint64_t ptpng_encode_score_avx2(const uint8_t *, size_t);
 void ptpng_encode_filter_avx2(uint8_t *, const uint8_t *, const uint8_t *,
                                size_t, unsigned, int);
 #endif
 #if PTPNG_ARM_NEON
+uint64_t ptpng_encode_score_neon(const uint8_t *, size_t);
 void ptpng_encode_filter_neon(uint8_t *, const uint8_t *, const uint8_t *,
                                size_t, unsigned, int);
 #endif
