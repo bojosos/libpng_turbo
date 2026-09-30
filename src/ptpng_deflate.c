@@ -162,6 +162,29 @@ PTPNG_API_INLINE uint32_t deflate_insert(deflate_state *state,
 {
     unsigned hash;
     uint32_t old;
+#if PTPNG_DEFLATE_WORD_STORE
+    if (size - pos >= 8) {
+        uint64_t word;
+        uint32_t short_value;
+        unsigned short_hash;
+        /* On known little-endian targets, one in-bounds load supplies both
+         * hashes. Mask before multiplying: bytes six and seven must not
+         * affect the existing six-byte hash or its candidate ordering. */
+        memcpy(&word, src + pos, sizeof(word));
+        short_value = (uint32_t)word & UINT32_C(0x00ffffff);
+        short_hash = (short_value * UINT32_C(2654435761)) >>
+                     (32 - DEFLATE_HASH_BITS);
+        word &= UINT64_C(0x0000ffffffffffff);
+        hash = (unsigned)((word * UINT64_C(0x9e3779b97f4a7c15)) >>
+                          (64 - DEFLATE_HASH_BITS));
+        state->short_previous[pos & (DEFLATE_WINDOW - 1)] = state->short_head[short_hash];
+        state->short_head[short_hash] = (uint32_t)pos + 1;
+        old = state->head[hash];
+        state->previous[pos & (DEFLATE_WINDOW - 1)] = old;
+        state->head[hash] = (uint32_t)pos + 1;
+        return old;
+    }
+#endif
     if (size - pos >= 3) {
         uint32_t value = src[pos] | ((uint32_t)src[pos + 1] << 8) |
                          ((uint32_t)src[pos + 2] << 16);
@@ -187,27 +210,50 @@ static unsigned deflate_match(const deflate_state *state, const uint8_t *src,
 {
     unsigned limit = (unsigned)(end - pos > 258 ? 258 : end - pos);
     unsigned best = minimum < 5 ? 5 : minimum, previous_distance = 0;
-    unsigned attempts = DEFLATE_CHAIN;
+    unsigned attempts = DEFLATE_CHAIN, distance_best = 0;
     uint32_t prefix_low;
     uint16_t prefix_high;
+#if PTPNG_DEFLATE_WORD_STORE
+    uint64_t prefix_word = 0;
+#endif
     *best_distance = 0;
     if (limit <= best) return 0;
     memcpy(&prefix_low, src + pos, sizeof(prefix_low));
     memcpy(&prefix_high, src + pos + 4, sizeof(prefix_high));
+#if PTPNG_DEFLATE_WORD_STORE
+    if (limit >= 8) {
+        memcpy(&prefix_word, src + pos, sizeof(prefix_word));
+        prefix_word &= UINT64_C(0x0000ffffffffffff);
+    }
+#endif
     if (best >= 8) attempts >>= 2;
     while (link && attempts--) {
         unsigned distance = (uint32_t)pos - (link - 1);
         size_t ref;
         unsigned length;
-        uint32_t candidate_low;
-        uint16_t candidate_high;
+        uint32_t next_link;
+        int matches;
         if (!distance || distance > DEFLATE_WINDOW || distance > pos ||
             distance <= previous_distance) break;
         ref = pos - distance;
-        memcpy(&candidate_low, src + ref, sizeof(candidate_low));
-        memcpy(&candidate_high, src + ref + 4, sizeof(candidate_high));
-        if (src[ref + best] == src[pos + best] &&
-            candidate_low == prefix_low && candidate_high == prefix_high) {
+        next_link = state->previous[ref & (DEFLATE_WINDOW - 1)];
+#if PTPNG_DEFLATE_WORD_STORE
+        if (limit >= 8) {
+            uint64_t candidate;
+            /* Masking keeps the same six-byte prefix. Both eight-byte loads
+             * are bounded by end, including references before pos. */
+            memcpy(&candidate, src + ref, sizeof(candidate));
+            matches = (candidate & UINT64_C(0x0000ffffffffffff)) == prefix_word;
+        } else
+#endif
+        {
+            uint32_t candidate_low;
+            uint16_t candidate_high;
+            memcpy(&candidate_low, src + ref, sizeof(candidate_low));
+            memcpy(&candidate_high, src + ref + 4, sizeof(candidate_high));
+            matches = candidate_low == prefix_low && candidate_high == prefix_high;
+        }
+        if (matches && src[ref + best] == src[pos + best]) {
             length = 6;
             while (limit - length >= 8) {
                 uint64_t a, b;
@@ -223,22 +269,25 @@ static unsigned deflate_match(const deflate_state *state, const uint8_t *src,
 #else
                     while (src[ref + length] == src[pos + length]) ++length;
 #endif
-                    break;
+                    /* The first differing byte is already known. */
+                    goto match_done;
                 }
                 length += 8;
             }
             while (length < limit && src[ref + length] == src[pos + length])
                 ++length;
+match_done:
             if (length > best) {
                 best = length;
-                *best_distance = distance;
+                distance_best = distance;
                 if (best == limit || best >= 128) break;
             }
         }
         previous_distance = distance;
-        link = state->previous[ref & (DEFLATE_WINDOW - 1)];
+        link = next_link;
     }
-    return *best_distance ? best : 0;
+    *best_distance = distance_best;
+    return distance_best ? best : 0;
 }
 
 /* Short matches compete with literal codes, rather than being accepted just
@@ -251,6 +300,7 @@ static unsigned deflate_short_match(const deflate_state *state, const uint8_t *s
 {
     unsigned limit = (unsigned)(end - pos > 5 ? 5 : end - pos);
     unsigned attempts = 4, previous_distance = 0, best = 0, best_saving = 0;
+    unsigned distance_best = 0;
     uint32_t link;
     *best_distance = 0;
     if (limit < 3 || limit <= minimum) return 0;
@@ -258,10 +308,12 @@ static unsigned deflate_short_match(const deflate_state *state, const uint8_t *s
     while (link && attempts--) {
         unsigned distance = (uint32_t)pos - (link - 1);
         unsigned length, cost, literal_cost, i;
+        uint32_t next_link;
         size_t ref;
         if (!distance || distance > DEFLATE_WINDOW || distance > pos ||
             distance <= previous_distance) break;
         ref = pos - distance;
+        next_link = state->short_previous[ref & (DEFLATE_WINDOW - 1)];
         if (src[ref] == src[pos] && src[ref + 1] == src[pos + 1] &&
             src[ref + 2] == src[pos + 2]) {
             length = 3;
@@ -272,14 +324,15 @@ static unsigned deflate_short_match(const deflate_state *state, const uint8_t *s
                 for (i = 0; i < length; ++i) literal_cost += literal_bits[src[pos + i]];
                 if (literal_cost > cost && literal_cost - cost > best_saving) {
                     best = length;
-                    *best_distance = distance;
+                    distance_best = distance;
                     best_saving = literal_cost - cost;
                 }
             }
         }
         previous_distance = distance;
-        link = state->short_previous[ref & (DEFLATE_WINDOW - 1)];
+        link = next_link;
     }
+    *best_distance = distance_best;
     return best;
 }
 
