@@ -7,7 +7,7 @@
   <title>ptpng benchmarks</title>
   <link rel="stylesheet" href="dashboard.css">
   <script src="data.js" defer></script>
-  <script src="dashboard.js" defer></script>
+  <script src="dashboard.js?v=2" defer></script>
 </head>
 <body>
   <main class="dashboard">
@@ -60,7 +60,7 @@
     </details>
     <details class="panel method-details"><summary>How to read these results</summary>
       <div class="method-grid">
-        <div><h3>Start with speed ratios</h3><p>Above 1× means ptpng is faster than the reference measured in the same run. The dashed line marks equal speed. File sizes are separate from speed: a smaller PNG can take longer to encode.</p></div>
+        <div><h3>Speed and file size</h3><p>Above 1× means ptpng is faster than the reference measured in the same run. The dashed line marks equal speed. File size is a separate comparison: 167.6% of reference bytes means a 67.6% larger PNG file.</p><p>PNG compression is lossless; dimensions and decoded pixels stay identical. Changing the reference changes the comparison, not ptpng's compression settings. zlib and zlib-ng can produce different file sizes at the same numbered level.</p></div>
         <div><h3>Machines can change</h3><p>Hosted runners are fresh virtual machines. Compare the recorded CPU and runner image before interpreting a change. These ratios do not replace alternating old/new measurements on one machine.</p></div>
         <div><h3>Timing and fixtures</h3><p>Decoder timings use medians of 12 alternating rounds after warm-up from commit e6f083c onward; earlier runs used best-of-12. Encoding uses five rotated rounds. Allocations and checksums are included; file I/O and freeing returned output are excluded.</p><p>Fixtures contain generated photo-like gradients, graphics and random noise. PNG streams can differ between OSes. Palette inputs expand to RGBA8 for both encoders.</p></div>
         <div><h3>Memory is a reference</h3><p>Warm-buffer copying measures payload MB/s over a 128 MiB working set. It is not a theoretical PNG limit: decoding reads compressed bytes and also reconstructs pixels and verifies checksums.</p></div>
