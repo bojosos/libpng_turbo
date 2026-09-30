@@ -1,433 +1,73 @@
-<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="color-scheme" content="dark" />
-    <meta name="viewport" content="width=device-width, minimum-scale=1.0, initial-scale=1, user-scalable=yes" />
-    <style>
-      html {
-        font-family: BlinkMacSystemFont,-apple-system,"Segoe UI",Roboto,Oxygen,Ubuntu,Cantarell,"Fira Sans","Droid Sans","Helvetica Neue",Helvetica,Arial,sans-serif;
-        -webkit-font-smoothing: antialiased;
-        color-scheme: dark;
-        background-color: #0d1117;
-        font-size: 16px;
-      }
-      body {
-        color: #c9d1d9;
-        margin: 8px;
-        font-size: 1em;
-        font-weight: 400;
-      }
-      header {
-        margin-bottom: 8px;
-        display: flex;
-        flex-direction: column;
-      }
-      main {
-        width: 100%;
-        display: flex;
-        flex-direction: column;
-      }
-      a {
-        color: #79c0ff;
-        cursor: pointer;
-        text-decoration: none;
-      }
-      a:hover {
-        color: #a5d6ff;
-      }
-      a:focus-visible, button:focus-visible {
-        outline: 2px solid #79c0ff;
-        outline-offset: 3px;
-      }
-      button {
-        color: #fff;
-        background-color: #238636;
-        border: 1px solid #3fb950;
-        border-radius: 6px;
-        padding: 8px 12px;
-        cursor: pointer;
-        text-align: center;
-      }
-      button:hover {
-        background-color: #2ea043;
-        flex: none;
-      }
-      .spacer {
-        flex: auto;
-      }
-      .small {
-        font-size: 0.75rem;
-      }
-      footer {
-        margin-top: 16px;
-        display: flex;
-        align-items: center;
-      }
-      .header-label {
-        margin-right: 4px;
-      }
-      .benchmark-nav {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px 16px;
-        margin: 16px 0;
-      }
-      .benchmark-nav a {
-        padding: 8px 12px;
-        background-color: #161b22;
-        border: 1px solid #30363d;
-        border-radius: 6px;
-      }
-      .benchmark-set {
-        margin: 8px 0;
-        width: 100%;
-        display: flex;
-        flex-direction: column;
-      }
-      .benchmark-title {
-        color: #f0f6fc;
-        font-size: 3rem;
-        font-weight: 600;
-        word-break: break-word;
-        text-align: center;
-      }
-      .benchmark-graphs {
-        display: flex;
-        flex-direction: row;
-        justify-content: space-around;
-        align-items: center;
-        flex-wrap: wrap;
-        width: 100%;
-      }
-      .benchmark-chart {
-        max-width: 1000px;
-        background-color: #161b22;
-        border: 1px solid #30363d;
-        border-radius: 8px;
-        margin: 8px 0;
-      }
-    </style>
-    <title>Benchmarks</title>
-  </head>
-
-  <body>
-    <header id="header">
-      <div class="header-item">
-        <strong class="header-label">Last Update:</strong>
-        <span id="last-update"></span>
-      </div>
-      <div class="header-item">
-        <strong class="header-label">Repository:</strong>
-        <a id="repository-link" rel="noopener"></a>
-      </div>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>ptpng benchmarks</title>
+  <link rel="stylesheet" href="dashboard.css">
+  <script src="data.js" defer></script>
+  <script src="dashboard.js" defer></script>
+</head>
+<body>
+  <main class="dashboard">
+    <header class="page-header">
+      <div><div class="eyebrow">Nightly performance</div><h1>ptpng benchmarks<span class="status-dot" aria-hidden="true"></span></h1>
+        <p>Explore decoder speed, encoder speed and compression across five platforms.</p></div>
+      <div class="header-actions"><a id="repository-link">GitHub repository ↗</a><button id="download" type="button">Download results</button>
+        <span id="updated" class="muted"></span></div>
     </header>
-    <nav id="benchmark-nav" class="benchmark-nav" aria-label="Benchmark sections"></nav>
-    <p>Hosted runners can change between runs. Start with the within-run speed ratios below;
-      1× means equal throughput. Ratios reduce machine variation but do not replace paired
-      old/new tests on one machine. Expand raw results for absolute throughput and encoding
-      time/size. The memory-copy measurement is a reference, not a theoretical PNG ceiling.
-      Tooltips show the measurement date and CPU. Click a point to open its GitHub Actions
-      run, or its commit when older data has no run record.</p>
-    <p>Speed ratios divide reference time by ptpng time: above 1× is faster.
-      File-size ratios divide ptpng bytes by reference bytes: below 1× is smaller.
-      The dashed 1× line means equal performance or equal file size. Encoding comparisons
-      include both zlib-ng level 1 and level 6, so speed and compression can be judged together.</p>
-    <p>Decoder points from <code>e6f083c</code> onward use medians of 12 alternating
-      rounds; earlier points used best-of-12 timings.</p>
-    <main id="main"></main>
-    <footer>
-      <button id="dl-button">Download data as JSON</button>
-      <div class="spacer"></div>
-      <div class="small">Powered by <a rel="noopener" href="https://github.com/marketplace/actions/continuous-benchmark">github-action-benchmark</a></div>
-    </footer>
-
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.2/dist/Chart.min.js"></script>
-    <script src="data.js"></script>
-    <script id="main-script">
-      'use strict';
-      (function() {
-        // Canvas labels and grids need their own colors, separate from CSS.
-        Chart.defaults.global.defaultFontColor = '#c9d1d9';
-        Chart.defaults.scale.gridLines.color = '#30363d';
-        Chart.defaults.scale.gridLines.zeroLineColor = '#484f58';
-        Chart.defaults.global.tooltips.backgroundColor = '#21262d';
-        Chart.defaults.global.tooltips.borderColor = '#484f58';
-        Chart.defaults.global.tooltips.borderWidth = 1;
-        // Colors from https://github.com/github/linguist/blob/master/lib/linguist/languages.yml
-        const toolColors = {
-          cargo: '#dea584',
-          go: '#00add8',
-          benchmarkjs: '#f1e05a',
-          benchmarkluau: '#000080',
-          pytest: '#3572a5',
-          googlecpp: '#f34b7d',
-          catch2: '#f34b7d',
-          julia: '#a270ba',
-          jmh: '#b07219',
-          benchmarkdotnet: '#178600',
-          customBiggerIsBetter: '#7ee787',
-          customSmallerIsBetter: '#ff7b72',
-          _: '#a5aab3'
-        };
-
-        function runnerMetadata(bench) {
-          const line = (bench.extra || '').split('\n').find(line => line.startsWith('Runner: '));
-          if (!line) return null;
-          try { return JSON.parse(line.slice(8)); } catch (_) { return null; }
-        }
-
-        function cpuSummary(metadata) {
-          if (!metadata) return 'CPU not recorded';
-          const cpu = metadata.cpu || '';
-          const model = cpu.match(/(?:Model name|machdep\.cpu\.brand_string):\s*([^\n]+)/);
-          const name = model ? model[1].trim() : cpu.split('\n')[0].trim();
-          return (name || metadata.machine || 'Unknown CPU') +
-            (metadata.logical_cpus ? ' · ' + metadata.logical_cpus + ' logical CPUs' : '');
-        }
-
-        function runUrl(point) {
-          const metadata = runnerMetadata(point.bench);
-          return metadata && /^\d+$/.test(String(metadata.run_id)) ?
-            window.BENCHMARK_DATA.repoUrl + '/actions/runs/' + metadata.run_id : point.commit.url;
-        }
-
-        function init() {
-          function collectBenchesPerTestCase(entries) {
-            const map = new Map();
-            for (const entry of entries) {
-              const {commit, date, tool, benches} = entry;
-              for (const bench of benches) {
-                const result = { commit, date, tool, bench };
-                const arr = map.get(bench.name);
-                if (arr === undefined) {
-                  map.set(bench.name, [result]);
-                } else {
-                  arr.push(result);
-                }
-              }
-            }
-            return map;
-          }
-
-          const data = window.BENCHMARK_DATA;
-
-          // Render header
-          document.getElementById('last-update').textContent = new Date(data.lastUpdate).toString();
-          const repoLink = document.getElementById('repository-link');
-          repoLink.href = data.repoUrl;
-          repoLink.textContent = data.repoUrl;
-
-          // Render footer
-          document.getElementById('dl-button').onclick = () => {
-            const dataUrl = 'data:,' + JSON.stringify(data, null, 2);
-            const a = document.createElement('a');
-            a.href = dataUrl;
-            a.download = 'benchmark_data.json';
-            a.click();
-          };
-
-          // Prepare data points for charts
-          const ratios = [];
-          const encodeSpeed = [];
-          const encodeSize = [];
-          for (const entries of Object.values(data.entries)) {
-            for (const entry of entries) {
-              const byName = new Map(entry.benches.map(b => [b.name, b]));
-              const benches = [];
-              const speedBenches = [];
-              const sizeBenches = [];
-              for (const bench of entry.benches) {
-                const encode = bench.name.match(/^(.*?) \/ ptpng-vs-libpng-zng (encode time|encoded size)$/);
-                if (encode && bench.value > 0) {
-                  const isTime = encode[2] === 'encode time';
-                  for (const level of [1, 6]) {
-                    const ref = byName.get(encode[1] + ' / libpng-zng-level' + level + ' ' + encode[2]);
-                    if (!ref || ref.unit !== bench.unit || !(ref.value > 0)) continue;
-                    const result = {
-                      name: encode[1] + ' / ' + (isTime ? 'encode speedup over ' : 'file size relative to ') +
-                        'libpng-zng-level' + level,
-                      unit: isTime ? '× reference speed (higher is faster)' : '× reference bytes (lower is smaller)',
-                      value: isTime ? ref.value / bench.value : bench.value / ref.value,
-                      extra: 'ptpng ' + bench.value + ' vs reference ' + ref.value + ' ' + bench.unit +
-                        '\n' + (bench.extra || '')
-                    };
-                    (isTime ? speedBenches : sizeBenches).push(result);
-                  }
-                }
-                if (!bench.name.includes('/ptpng-vs-') || bench.unit !== 'MPix/s') continue;
-                const ref = byName.get(bench.name.replace('/ptpng-vs-', '/'));
-                if (!ref || !(ref.value > 0)) continue;
-                benches.push({name: bench.name.replace('/ptpng-vs-', '/speedup-over-'),
-                  unit: '× reference throughput', value: bench.value / ref.value,
-                  extra: bench.value + ' vs ' + ref.value + ' MPix/s\n' + (bench.extra || '')});
-              }
-              if (benches.length) ratios.push({...entry, benches});
-              if (speedBenches.length) encodeSpeed.push({...entry, tool: 'customBiggerIsBetter', benches: speedBenches});
-              if (sizeBenches.length) encodeSize.push({...entry, benches: sizeBenches});
-            }
-          }
-          return [{name: 'Within-run decoder speedup', ratio: true,
-              dataSet: collectBenchesPerTestCase(ratios)},
-            {name: 'Encoder speed ratios · higher is faster', ratio: true, collapsed: true,
-              dataSet: collectBenchesPerTestCase(encodeSpeed)},
-            {name: 'Encoder file-size ratios · lower is smaller', ratio: true, collapsed: true,
-              dataSet: collectBenchesPerTestCase(encodeSize)},
-            ...Object.keys(data.entries).map(name => ({name, raw: true, collapsed: true,
-              dataSet: collectBenchesPerTestCase(data.entries[name])}))];
-        }
-
-        function renderAllChars(dataSets) {
-
-          function renderGraph(parent, name, dataset, ratio) {
-            const canvas = document.createElement('canvas');
-            canvas.className = 'benchmark-chart';
-            parent.appendChild(canvas);
-
-            const color = toolColors[dataset.length > 0 ? dataset[0].tool : '_'];
-            const data = {
-              labels: dataset.map(d => new Date(d.date).toISOString().slice(5, 16).replace('T', ' ')),
-              datasets: [
-                {
-                  label: name,
-                  data: dataset.map(d => d.bench.value),
-                  borderColor: color,
-                  backgroundColor: color + '60', // Add alpha for #rrggbbaa
-                  lineTension: 0,
-                }
-              ],
-            };
-            if (ratio) data.datasets.push({
-              label: '1× = equal', data: dataset.map(() => 1),
-              borderColor: '#8b949e', borderDash: [5, 5], borderWidth: 1,
-              fill: false, pointRadius: 0, pointHitRadius: 0, lineTension: 0
-            });
-            const options = {
-              scales: {
-                xAxes: [
-                  {
-                    scaleLabel: {
-                      display: true,
-                      labelString: 'Measurement date (UTC)',
-                    },
-                  }
-                ],
-                yAxes: [
-                  {
-                    scaleLabel: {
-                      display: true,
-                      labelString: dataset.length > 0 ? dataset[0].bench.unit : '',
-                    },
-                    ticks: {
-                      beginAtZero: true,
-                    }
-                  }
-                ],
-              },
-              tooltips: {
-                filter: item => item.datasetIndex === 0,
-                callbacks: {
-                  afterTitle: items => {
-                    const {index} = items[0];
-                    const data = dataset[index];
-                    const metadata = runnerMetadata(data.bench);
-                    return [
-                      'Measured: ' + new Date(data.date).toISOString(),
-                      'Commit: ' + data.commit.id.slice(0, 7),
-                      cpuSummary(metadata),
-                      metadata && metadata.run_id ? 'Run: ' + metadata.run_id + ' · click to open' : 'Click to open commit'
-                    ];
-                  },
-                  label: item => {
-                    let label = item.value;
-                    const { range, unit } = dataset[item.index].bench;
-                    label += ' ' + unit;
-                    if (range) {
-                      label += ' (' + range + ')';
-                    }
-                    return label;
-                  },
-                  afterLabel: item => {
-                    const { extra } = dataset[item.index].bench;
-                    return extra ? extra.split('\n').filter(line => !line.startsWith('Runner: ')) : '';
-                  }
-                }
-              },
-              onClick: (_mouseEvent, activeElems) => {
-                if (activeElems.length === 0) {
-                  return;
-                }
-                // XXX: Undocumented. How can we know the index?
-                const index = activeElems[0]._index;
-                const url = runUrl(dataset[index]);
-                window.open(url, '_blank');
-              },
-            };
-
-            new Chart(canvas, {
-              type: 'line',
-              data,
-              options,
-            });
-          }
-
-          function renderBenchSet(name, benchSet, main, ratio) {
-            const setElem = document.createElement('div');
-            setElem.className = 'benchmark-set';
-            main.appendChild(setElem);
-
-            const nameElem = document.createElement('h1');
-            nameElem.className = 'benchmark-title';
-            nameElem.textContent = name;
-            setElem.appendChild(nameElem);
-
-            const graphsElem = document.createElement('div');
-            graphsElem.className = 'benchmark-graphs';
-            setElem.appendChild(graphsElem);
-
-            for (const [benchName, benches] of benchSet.entries()) {
-              renderGraph(graphsElem, benchName, benches, ratio)
-            }
-            return setElem;
-          }
-
-          const main = document.getElementById('main');
-          const navigation = document.getElementById('benchmark-nav');
-          for (const [index, {name, dataSet, raw, ratio, collapsed}] of dataSets.entries()) {
-            const link = document.createElement('a');
-            link.href = '#benchmark-' + index;
-            link.textContent = !raw ? name :
-              name === 'PNG encoding time and size (nightly)' ? 'Encoder time and file size' :
-              name === 'ptpng vs libpng (nightly)' ? 'Raw decoder throughput' : name;
-            navigation.appendChild(link);
-            let target;
-            if (collapsed) {
-              const details = document.createElement('details');
-              target = details;
-              const summary = document.createElement('summary');
-              summary.textContent = (raw ? 'Raw results: ' : '') + name;
-              details.appendChild(summary);
-              main.appendChild(details);
-              // Build charts only when visible so canvas dimensions are correct.
-              const renderRaw = () => {
-                if (details.open && !details.dataset.rendered) {
-                  renderBenchSet(name, dataSet, details, ratio);
-                  details.dataset.rendered = 'true';
-                }
-              };
-              details.addEventListener('toggle', renderRaw);
-              link.onclick = () => {
-                details.open = true;
-                // Render before the anchor jumps, so its position is final.
-                renderRaw();
-              };
-            } else target = renderBenchSet(name, dataSet, main, ratio);
-            target.id = 'benchmark-' + index;
-          }
-        }
-
-        renderAllChars(init()); // Start
-      })();
-    </script>
-  </body>
+    <p id="error" role="alert" hidden></p>
+    <section class="controls panel" aria-label="Choose benchmark">
+      <div class="toolbar">
+        <div class="segmented" role="group" aria-label="Operation">
+          <button type="button" data-mode="decode" aria-pressed="true">Decoder</button>
+          <button type="button" data-mode="encode" aria-pressed="false">Encoder</button>
+          <button type="button" data-mode="memory" aria-pressed="false">Memory reference</button>
+        </div>
+        <span class="checksums">Checksums enabled</span>
+      </div>
+      <div class="filters">
+        <label>Platform<select id="platform"></select></label>
+        <label>Image<select id="image"></select></label>
+        <label>Output format<select id="format"></select></label>
+        <label>Compare with<select id="reference"></select></label>
+      </div>
+    </section>
+    <section id="stats" class="stats" aria-label="Latest selected result" aria-live="polite"></section>
+    <div class="results-grid">
+      <section class="panel trend-panel" aria-labelledby="trend-title">
+        <div class="section-heading"><div><div class="eyebrow">Performance over time</div><h2 id="trend-title">Loading measurements…</h2></div>
+          <div class="chart-controls"><label class="compact-label">Metric<select id="metric"></select></label>
+            <label class="compact-label">History<select id="range"><option value="10">Latest 10 runs</option><option value="30">Latest 30 runs</option><option value="all">All runs</option></select></label></div>
+        </div>
+        <p id="chart-caption" class="muted"></p>
+        <div id="chart" class="chart"></div>
+        <div id="legend" class="legend"></div>
+        <p class="muted">Points are spaced by measurement order. Dates are UTC.</p>
+        <div class="run-strip"><span id="machine" class="muted"></span><a id="latest-run" target="_blank" rel="noopener noreferrer">Latest run ↗</a></div>
+        <p id="point-help" class="muted">Hover or focus a point for its date and machine. Open a point to inspect its run.</p>
+      </section>
+      <section class="panel overview" aria-labelledby="overview-title">
+        <div class="section-heading"><div><div class="eyebrow">Choose a workload</div><h2 id="overview-title">Latest results</h2></div><span id="case-count" class="badge"></span></div>
+        <p id="overview-caption" class="muted"></p>
+        <div class="table-wrap"><table><thead id="overview-head"></thead><tbody id="overview-body"></tbody></table></div>
+        <p class="muted table-hint">Select an image to see its history.</p>
+      </section>
+    </div>
+    <details class="panel measurement-details"><summary>Measurement history and machine details</summary>
+      <div class="table-wrap history-wrap"><table><thead><tr><th>Measured, UTC</th><th>Commit</th><th>ptpng</th><th>Reference</th><th>Machine</th><th>Run</th></tr></thead><tbody id="history-body"></tbody></table></div>
+    </details>
+    <details class="panel method-details"><summary>How to read these results</summary>
+      <div class="method-grid">
+        <div><h3>Start with speed ratios</h3><p>Above 1× means ptpng is faster than the reference measured in the same run. The dashed line marks equal speed. File sizes are separate from speed: a smaller PNG can take longer to encode.</p></div>
+        <div><h3>Machines can change</h3><p>Hosted runners are fresh virtual machines. Compare the recorded CPU and runner image before interpreting a change. These ratios do not replace alternating old/new measurements on one machine.</p></div>
+        <div><h3>Timing and fixtures</h3><p>Decoder timings use medians of 12 alternating rounds after warm-up from commit e6f083c onward; earlier runs used best-of-12. Encoding uses five rotated rounds. Allocations and checksums are included; file I/O and freeing returned output are excluded.</p><p>Fixtures contain generated photo-like gradients, graphics and random noise. PNG streams can differ between OSes. Palette inputs expand to RGBA8 for both encoders.</p></div>
+        <div><h3>Memory is a reference</h3><p>Warm-buffer copying measures payload MB/s over a 128 MiB working set. It is not a theoretical PNG limit: decoding reads compressed bytes and also reconstructs pixels and verifies checksums.</p></div>
+      </div>
+    </details>
+    <footer><span id="history-count"></span><a id="view-link">Link to this view</a></footer>
+  </main>
+  <noscript><p>This dashboard needs JavaScript. The full benchmark history is available in <a href="data.js">data.js</a>.</p></noscript>
+</body>
 </html>
