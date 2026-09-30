@@ -158,6 +158,18 @@ static void deflate_make_codes(uint16_t literals[256], uint32_t lengths[259])
 }
 
 #if PTPNG_DEFLATE_WORD_STORE
+PTPNG_API_INLINE uint32_t deflate_three_literals(const uint8_t *src,
+    const uint16_t literals[256], unsigned *count)
+{
+    uint32_t a = literals[src[0]];
+    uint32_t b = literals[src[1]];
+    uint32_t c = literals[src[2]];
+    unsigned ab_bits = (a >> 9) + (b >> 9);
+    *count = ab_bits + (c >> 9);
+    return (a & 511u) | ((b & 511u) << (a >> 9)) |
+           ((c & 511u) << ab_bits);
+}
+
 /* Keep batching temporaries out of the usual literal/match search loop.
  * Only long runs produced by the existing search skip use this path. */
 #if defined(_MSC_VER)
@@ -168,14 +180,35 @@ __attribute__((noinline))
 static int deflate_literal_run(deflate_writer *w, const uint8_t *src,
                                size_t count, const uint16_t literals[256])
 {
+    uint8_t *dst = w->dst;
+    size_t pos = w->pos, limit = w->limit;
+    uint64_t bits = w->bits;
+    unsigned pending = w->count;
+    /* Six codes need at most 54 bits. With fewer than eight pending
+     * bits, one store fits all of them and stays within the output limit. */
+    while (count >= 6 && limit - pos >= 8) {
+        unsigned first_count, second_count, bytes;
+        uint32_t first = deflate_three_literals(src, literals, &first_count);
+        uint32_t second = deflate_three_literals(src + 3, literals, &second_count);
+        bits |= (uint64_t)first << pending;
+        pending += first_count;
+        bits |= (uint64_t)second << pending;
+        pending += second_count;
+        memcpy(dst + pos, &bits, sizeof(bits));
+        bytes = pending >> 3;
+        pos += bytes;
+        bits >>= bytes * 8;
+        pending &= 7;
+        src += 6;
+        count -= 6;
+    }
+    w->pos = pos;
+    w->bits = bits;
+    w->count = pending;
     while (count >= 3) {
-        uint32_t a = literals[src[0]];
-        uint32_t b = literals[src[1]];
-        uint32_t c = literals[src[2]];
-        unsigned ab_bits = (a >> 9) + (b >> 9);
-        uint32_t codes = (a & 511u) | ((b & 511u) << (a >> 9)) |
-                         ((c & 511u) << ab_bits);
-        if (!deflate_put(w, codes, ab_bits + (c >> 9))) return 0;
+        unsigned code_count;
+        uint32_t codes = deflate_three_literals(src, literals, &code_count);
+        if (!deflate_put(w, codes, code_count)) return 0;
         src += 3;
         count -= 3;
     }

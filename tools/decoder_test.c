@@ -244,6 +244,46 @@ static void test_matching_output_formats(void)
     }
 }
 
+static void test_rgb_expansion_transparency(void)
+{
+    /* Cross SIMD block and row boundaries, with transparent pixels inside
+     * the vector-sized prefix and the final scalar-sized pixel. */
+    static const unsigned char trns[] = {0,17, 0,29, 0,43};
+    unsigned transparent, y, x;
+    for (transparent = 0; transparent < 2; transparent++) {
+        unsigned char header[13], raw[104], zs[115], expected[136];
+        ptpng_opts opts = {0, PTPNG_OUT_RGBA8, 0};
+        ptpng_info info = {0};
+        void *out = NULL;
+        size_t len = 0;
+        memcpy(header, ihdr, sizeof(header));
+        be32(header, 17); be32(header + 4, 2); header[9] = 2;
+        for (y = 0; y < 2; y++) {
+            raw[y * 52] = 0;
+            for (x = 0; x < 17; x++) {
+                unsigned char *pixel = raw + y * 52 + 1 + x * 3;
+                unsigned char *rgba = expected + (y * 17 + x) * 4;
+                int match = x == 0 || x == 15 || x == 16;
+                pixel[0] = match ? 17 : (unsigned char)(x + y);
+                pixel[1] = match ? 29 : (unsigned char)(x * 7);
+                pixel[2] = match ? 43 : (unsigned char)(x * 13);
+                memcpy(rgba, pixel, 3);
+                rgba[3] = transparent && match ? 0 : 255;
+            }
+        }
+        begin_png(); png_size = 8;
+        chunk("IHDR", header, sizeof(header));
+        if (transparent) chunk("tRNS", trns, sizeof(trns));
+        chunk("IDAT", zs, zstream(zs, raw, sizeof(raw)));
+        chunk("IEND", NULL, 0);
+        CHECK(ptpng_decode(png_data, png_size, &opts, &out, &len, &info) == PTPNG_OK);
+        CHECK(len == sizeof(expected) && info.rowbytes == 68);
+        if (out && len == sizeof(expected)) CHECK(memcmp(out, expected, len) == 0);
+        else CHECK(out != NULL);
+        ptpng_free(out); ptpng_info_free(&info);
+    }
+}
+
 static void test_mixed_blocks(void)
 {
     /* zlib-generated dynamic, fixed, stored, dynamic blocks, with sync
@@ -295,6 +335,61 @@ static void fixed_symbol(unsigned char *dst, unsigned *bit, unsigned symbol)
     else { code = symbol - 280 + 192; n = 8; }
     for (i = 0; i < n; i++) { reversed = (reversed << 1) | (code & 1); code >>= 1; }
     put_bits(dst, bit, reversed, n);
+}
+
+static void test_literal_boundaries(void)
+{
+    unsigned len, invalid;
+    for (len = 0; len <= 33; len++)
+    for (invalid = 0; invalid <= 1; invalid++) {
+        unsigned char zs[64] = {0x78,0x01}, expected[33], out[42];
+        unsigned bit = 16, i;
+        unsigned long a = 1, b = 0;
+        size_t n, cut, capacity = invalid ? len + 8 : len;
+        put_bits(zs, &bit, 3, 3); /* final fixed block */
+        for (i = 0; i < len; i++) {
+            /* Alternate eight- and nine-bit codes across batch boundaries. */
+            expected[i] = (unsigned char)(i & 1 ? 144 + i : i * 3);
+            fixed_symbol(zs, &bit, expected[i]);
+            a += expected[i]; b += a;
+        }
+        if (invalid) fixed_symbol(zs, &bit, 286); /* reserved literal/length */
+        fixed_symbol(zs, &bit, 256);
+        n = (bit + 7) / 8;
+        be32(zs + n, ((b % 65521) << 16) | (a % 65521));
+        n += 4;
+        memset(out, 0xa5, sizeof(out));
+        if (invalid) {
+            CHECK(ptpng_inflate(zs, n, out, capacity, 0) != PTPNG_OK);
+        } else if (len) {
+            CHECK(ptpng_inflate(zs, n, out, len, 0) == PTPNG_OK);
+            CHECK(memcmp(out, expected, len) == 0);
+        } else {
+            unsigned char *empty = NULL;
+            size_t empty_len = 1;
+            CHECK(ptpng_inflate_dyn(zs, n, 1, &empty, &empty_len) == PTPNG_OK);
+            CHECK(empty != NULL && empty_len == 0);
+            free(empty);
+        }
+        CHECK(out[capacity] == 0xa5);
+        if (invalid) continue;
+        for (capacity = 0; capacity < len; capacity++) {
+            memset(out, 0xa5, sizeof(out));
+            CHECK(ptpng_inflate(zs, n, out, capacity, 0) != PTPNG_OK);
+            CHECK(out[capacity] == 0xa5);
+        }
+        for (cut = 0; cut < n; cut++) {
+            /* Exact input allocations let ASan detect refill overreads. */
+            unsigned char *prefix = (unsigned char *)malloc(cut ? cut : 1);
+            if (!prefix) { CHECK(prefix != NULL); return; }
+            memcpy(prefix, zs, cut);
+            capacity = len ? len : 1;
+            memset(out, 0xa5, sizeof(out));
+            CHECK(ptpng_inflate(prefix, cut, out, capacity, 0) != PTPNG_OK);
+            CHECK(out[capacity] == 0xa5);
+            free(prefix);
+        }
+    }
 }
 
 static void test_match_copies(void)
@@ -352,7 +447,9 @@ int main(void)
     test_cleanup_and_chunk_order();
     test_inflate_capacity();
     test_matching_output_formats();
+    test_rgb_expansion_transparency();
     test_mixed_blocks();
+    test_literal_boundaries();
     test_match_copies();
     if (failures) return 1;
     puts("decoder: metadata, limits, and malformed chunk regressions OK");

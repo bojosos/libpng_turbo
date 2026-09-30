@@ -10,7 +10,7 @@
  *    subtable arenas for codes longer than the root; entries precompute
  *    length/distance bases and extra-bit counts so decoding is
  *    load/shift/add with no symbol post-processing.
- *  - Dual-literal fast path: two literals decoded per refill with one
+ *  - Four-literal fast path: up to four literals decoded per refill with one
  *    bounds check; matches/EOB/subtables take the generic path.
  *  - Match copy: 8x64-bit move blocks when dist >= 64, 4x64-bit when
  *    dist >= 32 (32-byte blocks are overlap-safe exactly then), and
@@ -418,7 +418,7 @@ static int inflate_impl(const uint8_t *in, size_t in_len, uint8_t *out,
 
             REFILL();
             if (pos + 8 <= out_len) {
-                /* dual-literal fast path */
+                /* Up to four root-table literals share one refill. */
                 e = lit_tbl[PEEK32() & (LITLEN_SIZE - 1)];
                 nb = e & 0xF;
                 if ((e & (F_LIT | F_SUB)) == F_LIT && nb != 0) {
@@ -431,7 +431,24 @@ static int inflate_impl(const uint8_t *in, size_t in_len, uint8_t *out,
                         out[pos + 1] = (uint8_t)(e >> 8);
                         bitbuf >>= nb; bitcnt -= nb;
                         pos += 2;
-                        continue;
+                        e = lit_tbl[PEEK32() & (LITLEN_SIZE - 1)];
+                        nb = e & 0xF;
+                        if ((e & (F_LIT | F_SUB)) == F_LIT && nb != 0 &&
+                            bitcnt >= (int)nb) {
+                            out[pos++] = (uint8_t)(e >> 8);
+                            DROP(nb);
+                            e = lit_tbl[PEEK32() & (LITLEN_SIZE - 1)];
+                            nb = e & 0xF;
+                            if ((e & (F_LIT | F_SUB)) == F_LIT && nb != 0 &&
+                                bitcnt >= (int)nb) {
+                                out[pos++] = (uint8_t)(e >> 8);
+                                DROP(nb);
+                                continue;
+                            }
+                        }
+                        /* A following match can need more bits than remain.
+                         * Refill before consuming any nonliteral entry. */
+                        goto slow_decode;
                     }
                     /* second symbol is not a simple literal; the first
                      * literal is stored and consumed already.  A simple

@@ -75,6 +75,11 @@ def main():
                  for operation in ("decode", "encode") for name in args.images]
     if "graphic_pal8" in args.images:
         workloads.append(("decode", "graphic_pal8", "rgb8"))
+    for name in ("photo_rgb8", "graphic_rgb8"):
+        if name in args.images:
+            workloads.append(("decode", name, "rgba8"))
+    if "noise_rgba8" in args.images:
+        workloads.append(("decode", "noise_rgba8", "rgb8"))
     for operation, name, fmt in workloads:
         pairs = []
         for iteration in range(args.pairs):
@@ -85,7 +90,9 @@ def main():
                           "ratio": values[1][0] / values[0][0],
                           "logs": [value[1] for value in values]})
         ratios = [pair["ratio"] for pair in pairs]
-        workload = f"{operation}-{name}" + ("-rgb8" if fmt == "rgb8" else "")
+        workload = f"{operation}-{name}"
+        if operation == "decode" and fmt != "native":
+            workload += f"-{fmt}"
         results.append({"workload": workload, "affinity": affinity,
                         "platform": platform.platform(), "pairs": pairs})
         lines.append(f"| {workload} | {statistics.median(ratios):.3f}x | "
