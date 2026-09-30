@@ -15,50 +15,83 @@ Calls must be serialized across threads: the decoder shares mutable
 Huffman tables and CPU dispatch state. Optional metadata uses a bounded
 allocation table; excess metadata is skipped while pixels still decode.
 
-The tables below are historical measurements from the original benchmark.
-The benchmark now gives libpng a contiguous output allocation and includes
-setup and end-of-file processing for both decoders. Rerun it before using
-these ratios to compare the current code. See [PERFORMANCE.md](PERFORMANCE.md)
-for the September 2026 changes and reproducible measurements. These results
-do not establish a fastest-in-the-world claim.
+## Performance (30 September 2026)
 
-Measured on an Intel i7-1355U under typical load (best of 3x15
-interleaved runs, 3200x2400 images):
+The [nightly run](https://github.com/bojosos/libpng_turbo/actions/runs/36753946386)
+at [`86bcf29`](https://github.com/bojosos/libpng_turbo/commit/86bcf29d098473fbe295995f5bb8a9ac1f215d98)
+compares Release builds with **libpng + zlib-ng 2.2.4** (ZLIB_COMPAT).
+The fixtures are generated photo-like gradients, flat graphics and random
+noise. They are 3200x2400, except the two RGBA16 fixtures and `noise_rgba8`,
+which are 1024x768. Checksums and allocations are included; input file I/O
+and freeing the returned output are excluded.
 
-| image                | content          | ptpng   | libpng  | speedup |
-|----------------------|------------------|---------|---------|---------|
-| graphic_pal8         | flat graphics    | 3.1 ms  | 7.4 ms  | **2.4x**|
-| photo_gray16         | photo, 16-bit    | 20.1 ms | 35.1 ms | **1.8x**|
-| photo_rgb8_i1        | photo, interlace | ~30 ms  | ~50 ms  | **1.7x**|
-| photo_rgb8           | photo            | 31.9 ms | 50.9 ms | **1.6x**|
-| photo_gray8          | photo            | 16.3 ms | 26.6 ms | **1.6x**|
-| photo_rgba8          | photo, paeth     | 93.5 ms | 111.4 ms| **1.2x**|
-| graphic_rgb8         | match-heavy      | 16.3 ms | 15.9 ms | ~1.0x   |
+### Decoder
 
-RGBA8-conversion mode: 1.1-2.0x faster on most images; on one
-synthetic match-heavy case (`graphic_rgb8`) libpng's fused
-filler transform edges ahead by a few percent because ptpng converts
-in a separate pass over the pixel data.
+Native-output times below come from the **Windows x64 runner: AMD EPYC 7763,
+Windows Server 2025, four logical CPUs, OS scheduled**. Each decoder uses
+the median of 12 alternating rounds after warm-up. libpng uses a contiguous
+output allocation; setup and end-of-file processing are timed for both
+decoders. Milliseconds are derived from the artifact's reported MPix/s.
 
-### vs libpng + zlib-ng
+| Image | ptpng | libpng + zlib-ng | Speedup |
+| --- | ---: | ---: | ---: |
+| photo_rgb8 | 34.04 ms | 46.37 ms | 1.36x |
+| photo_rgba8 | 85.17 ms | 110.93 ms | 1.30x |
+| photo_gray8 | 19.68 ms | 33.63 ms | 1.71x |
+| photo_gray16 | 23.27 ms | 38.31 ms | 1.65x |
+| graphic_pal8 | 2.13 ms | 7.37 ms | 3.46x |
+| graphic_rgb8 | 11.60 ms | 13.19 ms | 1.14x |
+| photo_rgba16_paeth | 28.54 ms | 42.26 ms | 1.48x |
+| graphic_rgba16_paeth | 3.40 ms | 15.30 ms | 4.50x |
+| noise_rgba8 | 11.61 ms | 11.89 ms | 1.02x |
 
-The nightly benchmark also runs against **libpng linked with
-zlib-ng 2.2.4** (ZLIB_COMPAT), the strongest single-threaded
-zlib-based reference. zlib-ng's faster inflate closes much of the
-gap plain zlib leaves, but ptpng still wins native decode on every
-image (i7-1355U, best-of-12):
+### Encoder
 
-| image          | ptpng    | libpng+zlib-ng | speedup |
-|----------------|----------|----------------|---------|
-| graphic_pal8   | 2163 MPix/s| 944 MPix/s   | **2.3x**|
-| photo_rgba8    | 89 MPix/s  | 60 MPix/s    | **1.5x**|
-| photo_gray16   | 245 MPix/s | 187 MPix/s   | **1.3x**|
-| photo_rgb8     | 258 MPix/s | 206 MPix/s   | **1.25x**|
-| photo_gray8    | 323 MPix/s | 281 MPix/s   | **1.15x**|
-| graphic_rgb8   | 430 MPix/s | 405 MPix/s   | 1.06x   |
+On the same runner, encoding uses the median of five rotated rounds after
+verified warm-up. Both encoders receive identical pixels; the palette
+fixture expands to RGBA8 for both. The reference uses compression level 1.
+Size is ptpng's PNG byte count divided by the reference's: below 100% means
+a smaller file.
 
-RGBA8 mode: ptpng wins 4 of 6; libpng+zlib-ng's fused transforms edge
-ahead on `photo_rgba8` (0.84x) and `graphic_rgb8` (0.94x).
+| Image | ptpng | libpng + zlib-ng level 1 | Speedup | Size vs reference |
+| --- | ---: | ---: | ---: | ---: |
+| photo_rgb8 | 75.35 ms | 262.96 ms | 3.49x | 96.1% |
+| photo_rgba8 | 172.36 ms | 418.91 ms | 2.43x | 100.7% |
+| photo_gray8 | 42.77 ms | 121.95 ms | 2.85x | 98.5% |
+| photo_gray16 | 54.37 ms | 188.50 ms | 3.47x | 96.3% |
+| graphic_pal8 | 15.24 ms | 171.47 ms | 11.25x | 65.9% |
+| graphic_rgb8 | 12.39 ms | 141.95 ms | 11.46x | 70.7% |
+| photo_rgba16_paeth | 39.93 ms | 131.56 ms | 3.30x | 101.2% |
+| graphic_rgba16_paeth | 3.47 ms | 34.13 ms | 9.84x | 66.8% |
+| noise_rgba8 | 8.26 ms | 71.34 ms | 8.64x | 94.7% |
+
+Level 6 can produce substantially smaller files. Its timings and sizes,
+along with the stock-zlib comparisons, are on the
+[dark nightly charts](https://bojosos.github.io/libpng_turbo/bench/).
+
+### All five platforms
+
+These are geometric means of within-run speedups against libpng + zlib-ng:
+27 decoder cases (nine fixtures in native, RGB8 and RGBA8 formats) and nine
+encoder cases against level 1. ptpng encodes faster on all nine cases on
+every platform. The two remaining decoder losses are `noise_rgba8` to RGB8:
+0.957x on Windows x64 and 0.981x on Windows ARM64.
+
+| Platform | Decoder speedup | Faster decoder cases | Encoder speedup |
+| --- | ---: | ---: | ---: |
+| Linux x64 | 1.80x | 27/27 | 5.99x |
+| Windows x64 | 1.64x | 26/27 | 5.25x |
+| Linux ARM64 | 1.59x | 27/27 | 5.20x |
+| macOS ARM64 | 1.62x | 27/27 | 5.99x |
+| Windows ARM64 | 1.46x | 26/27 | 5.14x |
+
+Hosted runners can change machines between runs, and generated PNG streams
+can differ between OSes. Use these ratios for each run's reference comparison;
+use alternating old/new measurements on the same machine to assess code
+changes. [PERFORMANCE.md](PERFORMANCE.md#30-september-profiling-and-literal-batching)
+records those paired results, including the remaining small Linux x64 RGB
+photo-encode regression. This synthetic suite does not establish a
+fastest-in-the-world claim.
 
 ## Building (MSVC x64)
 
@@ -158,8 +191,9 @@ raw image; a decoder reads compressed input, so this is not a strict bound.
 
 The manual `Paired performance` workflow compares a full baseline commit SHA
 with the current revision on all five runner platforms. It alternates nine
-one-second timing pairs for each of nine decode/encode fixtures, plus
-palette-to-RGB conversion. Linux and Windows runs pin one logical CPU;
+one-second timing pairs for 22 workloads: nine fixtures decoded and encoded,
+plus palette-to-RGB, photo and graphics RGB-to-RGBA, and noise-to-RGB
+conversions. Linux and Windows runs pin one logical CPU;
 macOS remains OS scheduled. Artifacts contain raw pairs, output sizes,
 machine details and a Markdown summary.
 
@@ -171,7 +205,8 @@ machine details and a Markdown summary.
   word refills keep 48..64 bits valid via whole-byte absorption.
 - Flat root tables (litlen 10 bits, dist 8, code-length 7) with subtable
   arenas; entries precompute length/distance bases and extra-bit counts.
-- Dual-literal fast path: two literals per refill, one bounds check.
+- Four-literal fast path: up to four root-table literals per refill, with
+  bounded input/output access and a refill before a following match.
 - Fixed blocks reuse their cached tables directly, avoiding 29 KiB of
   table copying per block.
 - Match copies: 8x64-bit moves for dist>=64, 4x64-bit for dist>=32,
@@ -181,7 +216,9 @@ machine details and a Markdown summary.
 CRC-32 uses runtime-detected PCLMUL folding on x86 and CRC instructions on
 AArch64, with slicing-by-8 as the portable fallback. The PCLMUL implementation
 is adapted from zlib-ng; its license and attribution are retained in the source.
-Adler-32 uses AVX2, SSE2 or NEON with bounded vector sums.
+Adler-32 uses AVX2, SSE2 or NEON with bounded vector sums. The large-input
+NEON kernel processes 64-byte blocks and applies position weights once per
+2,048-byte chunk; inputs below 512 bytes retain the small-input kernel.
 
 **Filters** (`src/ptpng_filters.c`)
 - Fused kernels: reconstruction reads the filtered bytes and writes the
@@ -205,9 +242,14 @@ extraction is a strided copy per row. No intermediate image copies.
 Matching RGB8 and RGBA8 output formats reuse the reconstructed pixel
 buffer, avoiding another allocation and full-image copy.
 
-**Conversions** (`src/ptpng_avx2.c`): gray/gray-alpha/16-bit expansion
+**Conversions** (`src/ptpng_avx2.c`, `src/ptpng_neon.c`): gray/gray-alpha/16-bit expansion
 via pshufb butterflies, palette via AVX2 gather from a precombined
-rgba table; tRNS falls back to scalar.
+rgba table, and RGB8-to-RGBA8 via NEON structured loads and stores;
+tRNS falls back to scalar.
+
+**Encoder** (`src/ptpng_deflate.c`): long literal runs pack six codes per
+bounded 64-bit store. Short tails use the existing bit writer; batching
+preserves compression decisions and output bytes.
 
 ## Correctness
 
