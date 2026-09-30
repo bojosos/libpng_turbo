@@ -11,6 +11,16 @@ on:
         description: Skip sampling and run only paired timings against the baseline
         type: boolean
         default: false
+      images:
+        description: Optional space-separated benchmark image names for a focused comparison
+        required: false
+        default: ''
+      pairs:
+        description: Alternating timing pairs per workload (3-21)
+        default: '9'
+      seconds:
+        description: Seconds per timed loop (0.1-5)
+        default: '1'
 
 permissions:
   contents: read
@@ -66,12 +76,21 @@ jobs:
         run: bash tools/profile_linux.sh build_profile profile-results 5
       - name: Build baseline and compare on the same CPU
         if: inputs.baseline != ''
+        env:
+          COMPARE_IMAGES: ${{ inputs.images }}
+          COMPARE_PAIRS: ${{ inputs.pairs }}
+          COMPARE_SECONDS: ${{ inputs.seconds }}
         run: |
           cmake -S profile-baseline -B build_profile_baseline -DCMAKE_BUILD_TYPE=Release -DPTPNG_WITH_LIBPNG=OFF '-DCMAKE_C_FLAGS_RELEASE=-O3 -g -DNDEBUG -fno-omit-frame-pointer'
           cmake --build build_profile_baseline --target profile_png --parallel 2
           git -C profile-baseline rev-parse HEAD > profile-results/baseline-revision.txt
           python tools/bench_metadata.py profile-results/machine.json
-          python tools/compare_profiles.py build_profile_baseline/profile_png build_profile/profile_png profile-results
+          args=(--pairs "$COMPARE_PAIRS" --seconds "$COMPARE_SECONDS")
+          if [[ -n "$COMPARE_IMAGES" ]]; then
+            read -r -a images <<< "$COMPARE_IMAGES"
+            args+=(--images "${images[@]}")
+          fi
+          python tools/compare_profiles.py build_profile_baseline/profile_png build_profile/profile_png profile-results "${args[@]}"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
