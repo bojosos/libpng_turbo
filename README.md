@@ -139,10 +139,11 @@ output. Checksums and allocations are included. Timings use medians of
 12 alternating rounds after warm-up. The decoder loses on noise-to-RGB8
 on the two Windows platforms.
 
-The encoder changed on 1 October to target level-6 file sizes. Local
-tests reduce the RGB photo from 9.29 to 5.11 MiB, versus zlib-ng's 5.10 MiB;
-all nine fixtures are at most 2.4% larger than zlib-ng level 6. It beats
-stock zlib level 6 in all nine local timings, and zlib-ng in five.
+The encoder changed on 1 October to target level-6 file sizes. The RGB
+photo drops from 9.29 to 5.11 MiB, versus zlib-ng's 5.10 MiB. All five
+platforms produce identical PNG sizes; the nine fixtures are at most
+2.4% larger than zlib-ng level 6. Encoder speed averages 2.13–2.69x
+stock zlib level 6 and 1.05–1.37x zlib-ng, with some slower cases.
 See [encoder sizes and timings](PERFORMANCE.md#1-october-encoder-compression).
 Earlier dashboard points use the previous speed-first compressor.
 

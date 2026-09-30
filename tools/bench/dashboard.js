@@ -193,6 +193,7 @@
       state.metric = options('metric', Object.keys(metrics), metrics, state.metric, 'speed');
       $('image').disabled = state.mode === 'memory'; $('format').disabled = state.mode !== 'decode'; $('reference').disabled = state.mode === 'memory';
       document.querySelector('.checksums').textContent = state.mode === 'memory' ? 'Warm buffers · payload bandwidth' : 'Checksums enabled';
+      if ($('encoder-note')) $('encoder-note').hidden = state.mode !== 'encode';
       $('range').value = ['10', '30', 'all'].includes(state.range) ? state.range : '10'; state.range = $('range').value;
       const matching = inFormat.filter(record => record.reference === state.reference);
       const selected = matching.filter(record => record.image === state.image);

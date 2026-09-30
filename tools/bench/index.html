@@ -7,7 +7,7 @@
   <title>ptpng benchmarks</title>
   <link rel="stylesheet" href="dashboard.css">
   <script src="data.js" defer></script>
-  <script src="dashboard.js?v=2" defer></script>
+  <script src="dashboard.js?v=3" defer></script>
 </head>
 <body>
   <main class="dashboard">
@@ -35,6 +35,7 @@
       </div>
     </section>
     <section id="stats" class="stats" aria-label="Latest selected result" aria-live="polite"></section>
+    <p id="encoder-note" class="muted" hidden>From commit 835042d, the encoder prioritizes level-6 file sizes. Earlier runs used faster compression with much larger files. Compare speed and PNG file size together.</p>
     <div class="results-grid">
       <section class="panel trend-panel" aria-labelledby="trend-title">
         <div class="section-heading"><div><div class="eyebrow">Performance over time</div><h2 id="trend-title">Loading measurements…</h2></div>

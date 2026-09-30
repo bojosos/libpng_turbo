@@ -38,6 +38,31 @@ expand to RGBA8 for both encoders.
 | graphic_rgba16_paeth | 9,661 | +1.51% | +1.93% | 2.90x | 1.85x |
 | noise_rgba8 | 3,146,840 | -0.17% | -0.17% | 1.17x | 1.21x |
 
+[Nightly run 36787300229](https://github.com/bojosos/ptpng/actions/runs/36787300229)
+at [`835042d`](https://github.com/bojosos/ptpng/commit/835042df156c9d42f837729dfb22c4752a812141)
+produced identical PNG sizes on all five platforms. Encoder speedups below
+are geometric means across the nine fixtures; case counts show where ptpng
+is faster. Each comparison uses medians from the same runner and run.
+
+| Platform | vs zlib 6 | Faster cases | vs zlib-ng 6 | Faster cases |
+| --- | ---: | ---: | ---: | ---: |
+| Linux x64 | 2.69x | 9/9 | 1.37x | 6/9 |
+| Windows x64 | 2.69x | 9/9 | 1.36x | 5/9 |
+| Linux ARM64 | 2.13x | 9/9 | 1.05x | 4/9 |
+| macOS ARM64 | 2.59x | 8/9 | 1.12x | 3/9 |
+| Windows ARM64 | 2.31x | 9/9 | 1.18x | 4/9 |
+
+The x64/ARM64 ASan+UBSan campaigns passed 3,760,817 executions across
+decode, inflate, PNG encode and raw DEFLATE, including 5,711 direct
+compressor cases. These finite campaigns found no errors; they do not
+prove correctness for every possible input.
+
+[Linux profiling run 36787310317](https://github.com/bojosos/ptpng/actions/runs/36787310317)
+places 84.76% of RGB-photo encoder samples in the long matcher on x64
+and 86.21% on ARM64. Matcher and hash-chain insertion work are the next
+speed targets. ARM64 exposed hardware counters on Neoverse-N2; x64
+exposed only software task-clock sampling on EPYC 7763.
+
 The size gap had two independently measured causes. For graphics,
 stock zlib level 6 compressed the old sampled-filter data to 45,285
 bytes, versus 33,331 with full-row filters. Applying the old ptpng
