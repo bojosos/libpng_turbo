@@ -315,8 +315,6 @@ static unsigned deflate_short_match(const deflate_state *state, const uint8_t *s
     unsigned attempts = 4, previous_distance = 0, best = 0, best_saving = 0;
     unsigned distance_best = 0;
     uint32_t link;
-    unsigned literal_costs[6] = {0};
-    unsigned i;
 #if PTPNG_DEFLATE_WORD_STORE
     uint32_t prefix = 0;
 #endif
@@ -324,9 +322,6 @@ static unsigned deflate_short_match(const deflate_state *state, const uint8_t *s
     if (limit < 3 || limit <= minimum) return 0;
     link = state->short_previous[pos & (DEFLATE_WINDOW - 1)];
     if (!link) return 0;
-    /* Source literal costs are shared by every candidate in this chain. */
-    for (i = 0; i < limit; ++i)
-        literal_costs[i + 1] = literal_costs[i] + literal_bits[src[pos + i]];
 #if PTPNG_DEFLATE_WORD_STORE
     if (limit >= 4) memcpy(&prefix, src + pos, sizeof(prefix));
     else prefix = src[pos] | ((uint32_t)src[pos + 1] << 8) |
@@ -360,7 +355,11 @@ static unsigned deflate_short_match(const deflate_state *state, const uint8_t *s
             while (length < limit && src[ref + length] == src[pos + length]) ++length;
             if (length > minimum) {
                 cost = 14 + (distance <= 4 ? 0 : deflate_log2(distance - 1) - 1);
-                literal_cost = literal_costs[length];
+                /* Every short match covers three bytes, and at most five. */
+                literal_cost = literal_bits[src[pos]] + literal_bits[src[pos + 1]] +
+                               literal_bits[src[pos + 2]];
+                if (length > 3) literal_cost += literal_bits[src[pos + 3]];
+                if (length > 4) literal_cost += literal_bits[src[pos + 4]];
                 if (literal_cost > cost && literal_cost - cost > best_saving) {
                     best = length;
                     distance_best = distance;
