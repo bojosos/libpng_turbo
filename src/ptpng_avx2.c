@@ -373,7 +373,30 @@ static void rgba8_rgb8_avx2(const uint8_t *src, uint8_t *dst, uint32_t n,
     const __m128i alpha = _mm_setr_epi8(0, 0, 0, -1, 0, 0, 0, -1,
                                         0, 0, 0, -1, 0, 0, 0, -1);
     uint32_t i = 0;
-    (void)c;
+    if (c->reverse) {
+        while (n >= 8) {
+            const uint8_t *s;
+            __m128i lo, hi;
+            __m256i v;
+            n -= 8; s = src + (size_t)n * 3;
+            lo = _mm_loadu_si128((const __m128i *)s);
+            hi = _mm_loadu_si128((const __m128i *)(s + 8));
+            v = _mm256_inserti128_si256(_mm256_castsi128_si256(lo),
+                                       _mm_srli_si128(hi, 4), 1);
+            v = _mm256_shuffle_epi8(v, _mm256_broadcastsi128_si256(ctrl));
+            _mm256_storeu_si256((__m256i *)(dst + (size_t)n * 4),
+                               _mm256_or_si256(v, _mm256_broadcastsi128_si256(alpha)));
+        }
+        while (n) {
+            uint8_t r, g, b;
+            --n;
+            r = src[(size_t)n * 3]; g = src[(size_t)n * 3 + 1];
+            b = src[(size_t)n * 3 + 2];
+            dst[(size_t)n * 4] = r; dst[(size_t)n * 4 + 1] = g;
+            dst[(size_t)n * 4 + 2] = b; dst[(size_t)n * 4 + 3] = 255;
+        }
+        return;
+    }
     for (; n - i >= 8; i += 8) {
         __m128i lo = _mm_loadu_si128((const __m128i *)(src + i * 3));
         __m128i hi = _mm_loadu_si128((const __m128i *)(src + i * 3 + 8));

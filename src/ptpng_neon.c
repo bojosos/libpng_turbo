@@ -306,8 +306,36 @@ static void rgba8_rgb8_neon(const uint8_t *src, uint8_t *dst, uint32_t n,
                             const struct ptpng_cvt *c)
 {
     uint8x16x4_t rgba;
-    (void)c;
     rgba.val[3] = vdupq_n_u8(255);
+    if (c->reverse) {
+        while (n >= 16) {
+            uint8x16x3_t rgb;
+            n -= 16;
+            rgb = vld3q_u8(src + (size_t)n * 3);
+            rgba.val[0] = rgb.val[0];
+            rgba.val[1] = rgb.val[1];
+            rgba.val[2] = rgb.val[2];
+            vst4q_u8(dst + (size_t)n * 4, rgba);
+        }
+        if (n >= 8) {
+            uint8x8x4_t small;
+            uint8x8x3_t rgb;
+            n -= 8;
+            rgb = vld3_u8(src + (size_t)n * 3);
+            small.val[0] = rgb.val[0]; small.val[1] = rgb.val[1];
+            small.val[2] = rgb.val[2]; small.val[3] = vdup_n_u8(255);
+            vst4_u8(dst + (size_t)n * 4, small);
+        }
+        while (n) {
+            uint8_t r, g, b;
+            --n;
+            r = src[(size_t)n * 3]; g = src[(size_t)n * 3 + 1];
+            b = src[(size_t)n * 3 + 2];
+            dst[(size_t)n * 4] = r; dst[(size_t)n * 4 + 1] = g;
+            dst[(size_t)n * 4 + 2] = b; dst[(size_t)n * 4 + 3] = 255;
+        }
+        return;
+    }
     for (; n >= 16; n -= 16, src += 48, dst += 64) {
         uint8x16x3_t rgb = vld3q_u8(src);
         rgba.val[0] = rgb.val[0];
