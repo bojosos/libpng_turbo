@@ -200,23 +200,23 @@ static void test_matching_output_formats(void)
                                         97,109,127,173, 149,163,181,255};
     static const unsigned char trns[] = {0,17, 0,29, 0,43};
     unsigned test;
-    for (test = 0; test < 3; test++) {
+    for (test = 0; test < 4; test++) {
         unsigned char header[13], raw[18], zs[32], expected[16];
-        unsigned channels = test == 2 ? 4 : 3;
-        const unsigned char *samples = test == 2 ? rgba : rgb;
+        unsigned channels = test >= 2 ? 4 : 3;
+        const unsigned char *samples = test >= 2 ? rgba : rgb;
         ptpng_opts opts = {0, PTPNG_OUT_RGB8, 0};
         ptpng_info info;
         void *out = NULL;
         size_t len = 0, rowbytes = 2 * channels, expected_len = 4 * channels;
         unsigned y, i;
-        if (test != 0) opts.output_format = PTPNG_OUT_RGBA8;
+        if (test == 1 || test == 2) opts.output_format = PTPNG_OUT_RGBA8;
         memcpy(header, ihdr, sizeof(header));
         header[3] = header[7] = 2;
-        header[9] = test == 2 ? 6 : 2;
+        header[9] = test >= 2 ? 6 : 2;
         begin_png();
         png_size = 8;
         chunk("IHDR", header, sizeof(header));
-        if (test != 2) chunk("tRNS", trns, sizeof(trns));
+        if (test < 2) chunk("tRNS", trns, sizeof(trns));
         for (y = 0; y < 2; y++) {
             raw[y * (rowbytes + 1)] = 0;
             memcpy(raw + y * (rowbytes + 1) + 1, samples + y * rowbytes, rowbytes);
@@ -231,6 +231,10 @@ static void test_matching_output_formats(void)
                 expected[i * 4 + 3] = i == 0 ? 0 : 255;
             }
             expected_len = 16;
+        } else if (test == 3) {
+            /* RGB compaction must preserve the unread second RGBA row. */
+            for (i = 0; i < 4; i++) memcpy(expected + i * 3, rgba + i * 4, 3);
+            expected_len = 12;
         }
         memset(&info, 0, sizeof(info));
         CHECK(ptpng_decode(png_data, png_size, &opts, &out, &len, &info) == PTPNG_OK);
@@ -238,7 +242,7 @@ static void test_matching_output_formats(void)
         CHECK(info.width == 2 && info.height == 2);
         if (out && len == expected_len) CHECK(memcmp(out, expected, len) == 0);
         else CHECK(out != NULL);
-        CHECK(info.has_trns == (test != 2));
+        CHECK(info.has_trns == (test < 2));
         ptpng_free(out);
         ptpng_info_free(&info);
     }
@@ -302,6 +306,7 @@ static void test_color_conversion_boundaries(void)
         ptpng_cvt_fn fn = expand ? ptpng_cpu.cvt_table_rgba8[(2 << 4) | 3] :
                                   ptpng_cpu.cvt_table_rgb8[(6 << 4) | 3];
         if (!src || !dst) { free(src); free(dst); CHECK(0); return; }
+        memset(src, 0xa5, offset);
         for (i = 0; i < input_size; ++i)
             src[offset + i] = (unsigned char)(i * 37 + n * 11);
         for (i = 0; i < n; ++i) {
@@ -313,6 +318,13 @@ static void test_color_conversion_boundaries(void)
         CHECK(memcmp(dst + offset, expected, output_size) == 0);
         CHECK(dst[offset + output_size] == 0xa5);
         for (i = 0; i < offset; ++i) CHECK(dst[i] == 0xa5);
+        if (!expand) {
+            unsigned char guard = n ? src[offset + output_size] : 0;
+            fn(src + offset, src + offset, n, &cvt);
+            CHECK(memcmp(src + offset, expected, output_size) == 0);
+            if (n) CHECK(src[offset + output_size] == guard);
+            for (i = 0; i < offset; ++i) CHECK(src[i] == 0xa5);
+        }
         free(src); free(dst);
     }
 }

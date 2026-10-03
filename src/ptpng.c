@@ -1387,7 +1387,12 @@ int ptpng_decode(const void *data, size_t size, const ptpng_opts *opts,
             *out_len = (size_t)out_size;
         linfo.rowbytes = rb;
     } else {
-        uint8_t *conv = (uint8_t *)malloc((size_t)out_size);
+        /* Alpha removal writes fewer bytes than it reads. All RGBA8
+         * converters support dst <= src, so compact into the native
+         * allocation without touching unread pixels or later rows. */
+        uint8_t *conv = depth == 8 && ct == 6 &&
+                        opts->output_format == PTPNG_OUT_RGB8
+                      ? native : (uint8_t *)malloc((size_t)out_size);
         struct ptpng_cvt cvt;
         const ptpng_cvt_fn *tbl;
         size_t dst_row = (size_t)(out_size / h);
@@ -1427,7 +1432,8 @@ int ptpng_decode(const void *data, size_t size, const ptpng_opts *opts,
             cvt.fn = ptpng_cvt_table_rgba8_scalar[
                 ((unsigned)ct << 4) | DC(depth)];
         if (!cvt.fn) {
-            free(conv); free(native);
+            if (conv != native) free(conv);
+            free(native);
             ptpng_info_free(&linfo);
             return PTPNG_E_UNSUPPORTED;
         }
@@ -1435,7 +1441,7 @@ int ptpng_decode(const void *data, size_t size, const ptpng_opts *opts,
             cvt.fn(native + (size_t)y * rb, conv + (size_t)y * dst_row,
                    w, &cvt);
         }
-        free(native);
+        if (conv != native) free(native);
         *out = conv;
         if (out_len)
             *out_len = (size_t)out_size;
