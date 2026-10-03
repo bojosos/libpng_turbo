@@ -4,6 +4,14 @@
  */
 #include "ptpng_internal.h"
 #include <stdio.h>
+
+/* GCC ARM64 paired timings favor separate conversion allocations.
+ * Retain that path while other targets reuse the reconstructed buffer. */
+#if defined(__aarch64__) && defined(__GNUC__) && !defined(__clang__)
+#define PTPNG_REUSE_CVT_BUFFER 0
+#else
+#define PTPNG_REUSE_CVT_BUFFER 1
+#endif
 #if PTPNG_X86 && !defined(_MSC_VER)
 #include <cpuid.h>
 #endif
@@ -1317,7 +1325,7 @@ int ptpng_decode(const void *data, size_t size, const ptpng_opts *opts,
     }
 
     if (prof) P1 = pt_tsc();
-    expand_in_place = !interlace && depth == 8 && ct == 2 &&
+    expand_in_place = PTPNG_REUSE_CVT_BUFFER && !interlace && depth == 8 && ct == 2 &&
                       opts->output_format == PTPNG_OUT_RGBA8;
     raw = (uint8_t *)malloc((size_t)(expand_in_place && out_size > raw_size
                                   ? out_size : raw_size));
@@ -1407,7 +1415,7 @@ int ptpng_decode(const void *data, size_t size, const ptpng_opts *opts,
          * Alpha removal writes fewer bytes than it reads. RGBA8-to-RGB8
          * converters support dst <= src, so compact into the native
          * allocation without touching unread pixels or later rows. */
-        uint8_t *conv = expand_in_place || (depth == 8 && ct == 6 &&
+        uint8_t *conv = expand_in_place || (PTPNG_REUSE_CVT_BUFFER && depth == 8 && ct == 6 &&
                         opts->output_format == PTPNG_OUT_RGB8)
                       ? native : (uint8_t *)malloc((size_t)out_size);
         struct ptpng_cvt cvt;
