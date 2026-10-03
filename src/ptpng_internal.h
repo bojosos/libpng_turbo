@@ -143,16 +143,18 @@ struct ptpng_cvt {
     uint16_t trns_r, trns_g, trns_b; /* ct2 samples          */
     uint8_t has_trns;         /* ct0/2: apply transparency   */
 #if PTPNG_REUSE_CVT_BUFFER
+    uint8_t reverse;          /* RGB8 -> RGBA8: expand backward when enabled */
     /* Packed palette reads need word alignment; keep the byte view for
-     * portable construction and the scalar conversion tables. */
+     * portable construction and the scalar conversion tables. Put the
+     * flag in the alignment gap to retain the original structure size. */
     union {
         uint32_t pal_words[256];
         uint8_t pal_rgba[1024];
     };
 #else
     uint8_t pal_rgba[1024];
-#endif
     uint8_t reverse;          /* RGB8 -> RGBA8: expand backward when enabled */
+#endif
 };
 
 /* table index: (color_type << 4) | log2(bit_depth), 128 entries */
