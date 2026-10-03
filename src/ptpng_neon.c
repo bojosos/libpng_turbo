@@ -331,6 +331,7 @@ static void rgba8_rgb8_neon(const uint8_t *src, uint8_t *dst, uint32_t n,
 }
 
 /* RGBA8 -> RGB8 with bounded structured loads and exact RGB stores. */
+#if defined(__clang__) || defined(_MSC_VER)
 static void rgb8_rgba8_neon(const uint8_t *src, uint8_t *dst, uint32_t n,
                             const struct ptpng_cvt *c)
 {
@@ -356,6 +357,7 @@ static void rgb8_rgba8_neon(const uint8_t *src, uint8_t *dst, uint32_t n,
         dst[0] = src[0]; dst[1] = src[1]; dst[2] = src[2];
     }
 }
+#endif
 
 /* gray8 -> RGBA8: gg holds each value twice; controls index 0,2,4,6 and
  * 8,10,12,14; index 16 (out of table) zeroes the alpha lane which is
@@ -469,7 +471,10 @@ void ptpng_neon_init(void)
     ptpng_cvt_table_rgba8_neon[(2 << 4) | 3] = rgba8_rgb8_neon;
     ptpng_cvt_table_rgba8_neon[(4 << 4) | 3] = rgba8_ga8_neon;
     ptpng_cvt_table_rgba8_neon[(6 << 4) | 4] = rgba8_rgba16_neon;
+    /* GCC's scalar converter auto-vectorizes faster on Neoverse-N2. */
+#if defined(__clang__) || defined(_MSC_VER)
     ptpng_cvt_table_rgb8_neon[(6 << 4) | 3] = rgb8_rgba8_neon;
+#endif
 }
 
 #endif /* PTPNG_ARM_NEON */
