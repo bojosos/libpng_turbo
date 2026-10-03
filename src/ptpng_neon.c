@@ -330,6 +330,33 @@ static void rgba8_rgb8_neon(const uint8_t *src, uint8_t *dst, uint32_t n,
     }
 }
 
+/* RGBA8 -> RGB8 with bounded structured loads and exact RGB stores. */
+static void rgb8_rgba8_neon(const uint8_t *src, uint8_t *dst, uint32_t n,
+                            const struct ptpng_cvt *c)
+{
+    (void)c;
+    for (; n >= 16; n -= 16, src += 64, dst += 48) {
+        uint8x16x4_t rgba = vld4q_u8(src);
+        uint8x16x3_t rgb;
+        rgb.val[0] = rgba.val[0];
+        rgb.val[1] = rgba.val[1];
+        rgb.val[2] = rgba.val[2];
+        vst3q_u8(dst, rgb);
+    }
+    if (n >= 8) {
+        uint8x8x4_t rgba = vld4_u8(src);
+        uint8x8x3_t rgb;
+        rgb.val[0] = rgba.val[0];
+        rgb.val[1] = rgba.val[1];
+        rgb.val[2] = rgba.val[2];
+        vst3_u8(dst, rgb);
+        n -= 8; src += 32; dst += 24;
+    }
+    for (; n; --n, src += 4, dst += 3) {
+        dst[0] = src[0]; dst[1] = src[1]; dst[2] = src[2];
+    }
+}
+
 /* gray8 -> RGBA8: gg holds each value twice; controls index 0,2,4,6 and
  * 8,10,12,14; index 16 (out of table) zeroes the alpha lane which is
  * then filled by the OR constant. */
@@ -442,6 +469,7 @@ void ptpng_neon_init(void)
     ptpng_cvt_table_rgba8_neon[(2 << 4) | 3] = rgba8_rgb8_neon;
     ptpng_cvt_table_rgba8_neon[(4 << 4) | 3] = rgba8_ga8_neon;
     ptpng_cvt_table_rgba8_neon[(6 << 4) | 4] = rgba8_rgba16_neon;
+    ptpng_cvt_table_rgb8_neon[(6 << 4) | 3] = rgb8_rgba8_neon;
 }
 
 #endif /* PTPNG_ARM_NEON */

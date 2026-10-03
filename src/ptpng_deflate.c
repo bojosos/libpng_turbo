@@ -212,14 +212,16 @@ static unsigned deflate_match(const deflate_state *state, const uint8_t *src,
     unsigned best = minimum < 5 ? 5 : minimum, previous_distance = 0;
     unsigned attempts = DEFLATE_CHAIN, distance_best = 0;
     uint32_t prefix_low;
+    uint32_t best_tail;
     uint16_t prefix_high;
 #if PTPNG_DEFLATE_WORD_STORE
     uint64_t prefix_word = 0;
 #endif
     *best_distance = 0;
-    if (limit <= best) return 0;
+    if (!link || limit <= best) return 0;
     memcpy(&prefix_low, src + pos, sizeof(prefix_low));
     memcpy(&prefix_high, src + pos + 4, sizeof(prefix_high));
+    memcpy(&best_tail, src + pos + best - 3, sizeof(best_tail));
 #if PTPNG_DEFLATE_WORD_STORE
     if (limit >= 8) {
         memcpy(&prefix_word, src + pos, sizeof(prefix_word));
@@ -232,11 +234,17 @@ static unsigned deflate_match(const deflate_state *state, const uint8_t *src,
         size_t ref;
         unsigned length;
         uint32_t next_link;
+        uint32_t candidate_tail;
         int matches;
         if (!distance || distance > DEFLATE_WINDOW || distance > pos ||
             distance <= previous_distance) break;
         ref = pos - distance;
         next_link = state->previous[ref & (DEFLATE_WINDOW - 1)];
+        /* A longer match must include all four bytes ending at best. Check
+         * these before the common prefix to reject unhelpful candidates.
+         * best < limit, so both probes stay inside the input block. */
+        memcpy(&candidate_tail, src + ref + best - 3, sizeof(candidate_tail));
+        if (candidate_tail != best_tail) goto next_match;
 #if PTPNG_DEFLATE_WORD_STORE
         if (limit >= 8) {
             uint64_t candidate;
@@ -253,7 +261,7 @@ static unsigned deflate_match(const deflate_state *state, const uint8_t *src,
             memcpy(&candidate_high, src + ref + 4, sizeof(candidate_high));
             matches = candidate_low == prefix_low && candidate_high == prefix_high;
         }
-        if (matches && src[ref + best] == src[pos + best]) {
+        if (matches) {
             length = 6;
             while (limit - length >= 8) {
                 uint64_t a, b;
@@ -281,8 +289,10 @@ match_done:
                 best = length;
                 distance_best = distance;
                 if (best == limit || best >= 128) break;
+                memcpy(&best_tail, src + pos + best - 3, sizeof(best_tail));
             }
         }
+next_match:
         previous_distance = distance;
         link = next_link;
     }

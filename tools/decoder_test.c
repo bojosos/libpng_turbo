@@ -284,6 +284,39 @@ static void test_rgb_expansion_transparency(void)
     }
 }
 
+static void test_color_conversion_boundaries(void)
+{
+    unsigned expand, n, offset, i;
+    ptpng_cpu_init();
+    for (expand = 0; expand < 2; ++expand)
+    for (n = 0; n <= 65; ++n)
+    for (offset = 0; offset < 32; ++offset) {
+        unsigned input_channels = expand ? 3 : 4;
+        unsigned output_channels = expand ? 4 : 3;
+        size_t input_size = (size_t)n * input_channels;
+        size_t output_size = (size_t)n * output_channels;
+        unsigned char *src = (unsigned char *)malloc(input_size + offset ? input_size + offset : 1);
+        unsigned char *dst = (unsigned char *)malloc(output_size + offset + 1);
+        unsigned char expected[65 * 4];
+        struct ptpng_cvt cvt = {0};
+        ptpng_cvt_fn fn = expand ? ptpng_cpu.cvt_table_rgba8[(2 << 4) | 3] :
+                                  ptpng_cpu.cvt_table_rgb8[(6 << 4) | 3];
+        if (!src || !dst) { free(src); free(dst); CHECK(0); return; }
+        for (i = 0; i < input_size; ++i)
+            src[offset + i] = (unsigned char)(i * 37 + n * 11);
+        for (i = 0; i < n; ++i) {
+            memcpy(expected + i * output_channels, src + offset + i * input_channels, 3);
+            if (expand) expected[i * 4 + 3] = 255;
+        }
+        memset(dst, 0xa5, output_size + offset + 1);
+        fn(src + offset, dst + offset, n, &cvt);
+        CHECK(memcmp(dst + offset, expected, output_size) == 0);
+        CHECK(dst[offset + output_size] == 0xa5);
+        for (i = 0; i < offset; ++i) CHECK(dst[i] == 0xa5);
+        free(src); free(dst);
+    }
+}
+
 static void test_mixed_blocks(void)
 {
     /* zlib-generated dynamic, fixed, stored, dynamic blocks, with sync
@@ -448,6 +481,7 @@ int main(void)
     test_inflate_capacity();
     test_matching_output_formats();
     test_rgb_expansion_transparency();
+    test_color_conversion_boundaries();
     test_mixed_blocks();
     test_literal_boundaries();
     test_match_copies();
