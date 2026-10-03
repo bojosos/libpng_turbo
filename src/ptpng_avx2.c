@@ -474,7 +474,8 @@ static void rgba8_p8_avx2(const uint8_t *src, uint8_t *dst, uint32_t n,
     }
 }
 
-/* Palette8 -> RGB8: gather eight packed colors, remove alpha and store
+#if defined(_MSC_VER) && !defined(__clang__)
+/* MSVC Palette8 -> RGB8: gather eight packed colors, remove alpha and store
  * exactly twenty-four bytes. No source or output padding is required. */
 static void rgb8_p8_avx2(const uint8_t *src, uint8_t *dst, uint32_t n,
                          const struct ptpng_cvt *c)
@@ -495,6 +496,7 @@ static void rgb8_p8_avx2(const uint8_t *src, uint8_t *dst, uint32_t n,
     for (; n; --n, ++src, dst += 3)
         memcpy(dst, c->pal_rgba + (size_t)*src * 4, 3);
 }
+#endif
 
 static uint32_t adler32_avx2(const uint8_t *p, size_t n)
 {
@@ -564,6 +566,9 @@ void ptpng_avx2_init(void)
         ptpng_cvt_table_rgba8_avx2[(6 << 4) | 4] = rgba8_rgba16_avx2;
         ptpng_cvt_table_rgba8_avx2[(3 << 4) | 3] = rgba8_p8_avx2;
         ptpng_cvt_table_rgb8_avx2[(6 << 4) | 3] = rgb8_rgba8_avx2;
+#if defined(_MSC_VER) && !defined(__clang__)
+        /* GCC's scalar packed-palette lookup is faster than RGB gathering. */
         ptpng_cvt_table_rgb8_avx2[(3 << 4) | 3] = rgb8_p8_avx2;
+#endif
     }
 }
