@@ -457,7 +457,7 @@ static void rgb8_rgba8_avx2(const uint8_t *src, uint8_t *dst, uint32_t n,
 static void rgba8_p8_avx2(const uint8_t *src, uint8_t *dst, uint32_t n,
                           const struct ptpng_cvt *c)
 {
-    const uint32_t *tab = (const uint32_t *)(const void *)c->pal_rgba;
+    const uint32_t *tab = c->pal_words;
     uint32_t i = 0;
     for (; i + 8 <= n; i += 8) {
         __m256i idx = _mm256_cvtepu8_epi32(
