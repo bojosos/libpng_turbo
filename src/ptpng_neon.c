@@ -307,6 +307,7 @@ static void rgba8_rgb8_neon(const uint8_t *src, uint8_t *dst, uint32_t n,
 {
     uint8x16x4_t rgba;
     rgba.val[3] = vdupq_n_u8(255);
+#if PTPNG_REUSE_CVT_BUFFER
     if (c->reverse) {
         while (n >= 16) {
             uint8x16x3_t rgb;
@@ -336,6 +337,9 @@ static void rgba8_rgb8_neon(const uint8_t *src, uint8_t *dst, uint32_t n,
         }
         return;
     }
+#else
+    (void)c;
+#endif
     for (; n >= 16; n -= 16, src += 48, dst += 64) {
         uint8x16x3_t rgb = vld3q_u8(src);
         rgba.val[0] = rgb.val[0];

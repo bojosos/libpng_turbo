@@ -324,7 +324,9 @@ static void test_color_conversion_boundaries(void)
             CHECK(memcmp(src + offset, expected, output_size) == 0);
             if (n) CHECK(src[offset + output_size] == guard);
             for (i = 0; i < offset; ++i) CHECK(src[i] == 0xa5);
-        } else {
+        }
+#if PTPNG_REUSE_CVT_BUFFER
+        else {
             memset(dst + offset, 0xa5, output_size);
             memcpy(dst + offset, src + offset, input_size);
             cvt.reverse = 1;
@@ -333,6 +335,7 @@ static void test_color_conversion_boundaries(void)
             CHECK(dst[offset + output_size] == 0xa5);
             for (i = 0; i < offset; ++i) CHECK(dst[i] == 0xa5);
         }
+#endif
         free(src); free(dst);
     }
 }

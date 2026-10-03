@@ -373,6 +373,7 @@ static void rgba8_rgb8_avx2(const uint8_t *src, uint8_t *dst, uint32_t n,
     const __m128i alpha = _mm_setr_epi8(0, 0, 0, -1, 0, 0, 0, -1,
                                         0, 0, 0, -1, 0, 0, 0, -1);
     uint32_t i = 0;
+#if PTPNG_REUSE_CVT_BUFFER
     if (c->reverse) {
         while (n >= 8) {
             const uint8_t *s;
@@ -397,6 +398,9 @@ static void rgba8_rgb8_avx2(const uint8_t *src, uint8_t *dst, uint32_t n,
         }
         return;
     }
+#else
+    (void)c;
+#endif
     for (; n - i >= 8; i += 8) {
         __m128i lo = _mm_loadu_si128((const __m128i *)(src + i * 3));
         __m128i hi = _mm_loadu_si128((const __m128i *)(src + i * 3 + 8));

@@ -5,13 +5,6 @@
 #include "ptpng_internal.h"
 #include <stdio.h>
 
-/* GCC ARM64 paired timings favor separate conversion allocations.
- * Retain that path while other targets reuse the reconstructed buffer. */
-#if defined(__aarch64__) && defined(__GNUC__) && !defined(__clang__)
-#define PTPNG_REUSE_CVT_BUFFER 0
-#else
-#define PTPNG_REUSE_CVT_BUFFER 1
-#endif
 #if PTPNG_X86 && !defined(_MSC_VER)
 #include <cpuid.h>
 #endif
@@ -313,6 +306,7 @@ static void rgba8_rgb8(const uint8_t *src, uint8_t *dst, uint32_t n,
 {
     uint16_t r = c->trns_r, g = c->trns_g, b = c->trns_b;
     uint32_t i;
+#if PTPNG_REUSE_CVT_BUFFER
     if (c->reverse) {
         src += (size_t)n * 3; dst += (size_t)n * 4;
         while (n--) {
@@ -325,6 +319,7 @@ static void rgba8_rgb8(const uint8_t *src, uint8_t *dst, uint32_t n,
         }
         return;
     }
+#endif
     for (i = 0; i < n; i++) {
         dst[0] = src[0]; dst[1] = src[1]; dst[2] = src[2];
         dst[3] = (c->has_trns && src[0] == (r & 0xFF) &&
@@ -1325,7 +1320,8 @@ int ptpng_decode(const void *data, size_t size, const ptpng_opts *opts,
     }
 
     if (prof) P1 = pt_tsc();
-    expand_in_place = PTPNG_REUSE_CVT_BUFFER && !interlace && depth == 8 && ct == 2 &&
+    expand_in_place = PTPNG_REUSE_CVT_BUFFER && !interlace &&
+                      depth == 8 && ct == 2 &&
                       opts->output_format == PTPNG_OUT_RGBA8;
     raw = (uint8_t *)malloc((size_t)(expand_in_place && out_size > raw_size
                                   ? out_size : raw_size));
@@ -1415,7 +1411,8 @@ int ptpng_decode(const void *data, size_t size, const ptpng_opts *opts,
          * Alpha removal writes fewer bytes than it reads. RGBA8-to-RGB8
          * converters support dst <= src, so compact into the native
          * allocation without touching unread pixels or later rows. */
-        uint8_t *conv = expand_in_place || (PTPNG_REUSE_CVT_BUFFER && depth == 8 && ct == 6 &&
+        uint8_t *conv = expand_in_place ||
+                       (PTPNG_REUSE_CVT_BUFFER && depth == 8 && ct == 6 &&
                         opts->output_format == PTPNG_OUT_RGB8)
                       ? native : (uint8_t *)malloc((size_t)out_size);
         struct ptpng_cvt cvt;
@@ -1436,7 +1433,9 @@ int ptpng_decode(const void *data, size_t size, const ptpng_opts *opts,
         cvt.trns_g = linfo.trns[1];
         cvt.trns_b = linfo.trns[2];
         cvt.has_trns = linfo.has_trns;
+#if PTPNG_REUSE_CVT_BUFFER
         cvt.reverse = (uint8_t)expand_in_place;
+#endif
         if (ct == 3) {
             /* Packed entries serve RGB stores and the RGBA gather path. */
             unsigned pi;
@@ -1458,7 +1457,10 @@ int ptpng_decode(const void *data, size_t size, const ptpng_opts *opts,
             cvt.fn = ptpng_cvt_table_rgba8_scalar[
                 ((unsigned)ct << 4) | DC(depth)];
         if (!cvt.fn) {
-            if (conv != native) free(conv);
+#if PTPNG_REUSE_CVT_BUFFER
+            if (conv != native)
+#endif
+                free(conv);
             free(native);
             ptpng_info_free(&linfo);
             return PTPNG_E_UNSUPPORTED;
@@ -1468,7 +1470,10 @@ int ptpng_decode(const void *data, size_t size, const ptpng_opts *opts,
             cvt.fn(native + (size_t)row * rb, conv + (size_t)row * dst_row,
                    w, &cvt);
         }
-        if (conv != native) free(native);
+#if PTPNG_REUSE_CVT_BUFFER
+        if (conv != native)
+#endif
+            free(native);
         *out = conv;
         if (out_len)
             *out_len = (size_t)out_size;
