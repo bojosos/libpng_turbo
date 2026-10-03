@@ -88,6 +88,104 @@ includes 1,278 raw-compressor cases reaching inputs up to 2 MiB. These
 bounded campaigns and synthetic fixtures do not prove correctness or
 performance for every input.
 
+## 3 October decoding follow-up
+
+[Final paired run 37153416150](https://github.com/bojosos/ptpng/actions/runs/37153416150)
+compares `a16ee14` with `51d5bc8`, which already includes the encoder and
+initial converter improvements above. Each of 23 workloads has seven
+alternating pairs with at least 0.5 seconds per timed loop. Linux and
+Windows pin both versions to logical CPU 0; macOS remains OS scheduled.
+All 805 old/new output-size pairs match, including 315 encoder pairs.
+Values below are median candidate/baseline throughput ratios.
+
+| Platform | RGB photo to RGBA8 | RGB graphics to RGBA8 | RGBA photo to RGB8 | Noise to RGB8 | Palette to RGB8 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Linux x64 | 1.003x | 1.117x | 0.997x | 1.006x | 1.007x |
+| Windows x64 | 1.058x | 1.095x | 1.021x | 1.019x | 0.936x |
+| Linux ARM64 | 1.000x | 0.997x | 0.999x | 0.999x | 1.000x |
+| macOS ARM64 | 1.049x | 1.227x | 1.010x | 1.003x | 0.994x |
+| Windows ARM64 | 1.049x | 1.113x | 1.033x | 1.034x | 0.999x |
+
+Graphics expansion improved in all seven pairs on Linux x64, Windows x64
+and macOS ARM64; Windows ARM64 improved in six, with one 0.756x outlier.
+Windows ARM64 photo expansion ranged 1.046–1.101x and noise compaction
+1.027–1.057x. Windows x64 photo and noise gains remain uncertain: their
+ranges were 0.999–1.157x and 0.958–1.106x. macOS retains broad scheduling
+variation, including native decoder controls.
+
+The patch has remaining regressions. Windows x64 palette-to-RGB measured
+0.936x, with six of seven pairs slower and a 0.850–1.017x range. Native
+Gray16 decoding on Linux x64 measured 0.963x (0.960–0.997x), and native
+RGBA16 graphics on Windows ARM64 measured 0.965x (0.962–0.968x); every pair
+in those two cases was slower. Fourteen-case decoder geometric means
+improved 0.8–1.6% on the enabled platforms and stayed at parity on Linux
+ARM64. Those means weight each synthetic case equally, not a production
+workload.
+
+RGB8-to-RGBA8 and RGBA8-to-RGB8 output conversion previously allocated a
+second pixel buffer after reconstructing the native image. Alpha removal
+now compacts forward into that native allocation. For non-interlaced RGB8
+expansion, the raw allocation reserves the larger output size, with both
+sizes checked against the existing limit. Rows and pixels convert backward,
+loading each complete AVX2/NEON input group before writing its expanded
+output. Scalar conversion reads all three channels before storing and
+preserves tRNS transparency. Interlaced RGB expansion retains extraction
+and separate conversion; interlaced RGBA compaction reuses the extracted
+native image.
+
+RGBA-to-RGB reuse removes a temporary allocation of three bytes per pixel,
+but the returned allocation retains the native capacity of approximately
+four bytes per pixel. Its reported length and row stride remain three
+bytes per pixel. RGB-to-RGBA expansion returns the four-byte output
+allocation directly.
+
+GCC ARM64 retains separate conversion allocations. The first nine-pair
+[comparison](https://github.com/bojosos/ptpng/actions/runs/37146078240)
+found no RGB-photo expansion gain, a 3.5% graphics expansion slowdown and a
+2.4% RGBA-photo compaction slowdown on Linux ARM64. The same experiment
+improved RGB graphics expansion by 5.2% on Linux x64, 8.1% on Windows x64,
+13.0% on Windows ARM64 and 23.9% on macOS ARM64. macOS was OS scheduled
+and had broad ranges, including unchanged native decoder controls.
+
+Enabled builds align packed palette entries to four bytes, with byte and
+word views of the same table. MSVC AVX2 palette-to-RGB conversion gathers
+eight entries, removes alpha and writes exactly 24 bytes with two stores; its
+scalar tail handles the remaining zero to seven pixels. Disabled GCC
+ARM64 builds retain their original palette layout and structure size,
+omit backward converter branches and retain their original cleanup path.
+Enabled builds put the reverse flag in the alignment gap before the table
+and also retain the original structure size. Converter regressions
+cover lengths 0–65 at every byte alignment
+modulo 32, same-buffer compaction and enabled backward expansion, output
+guards, multi-row compaction and RGB tRNS transparency. The backward
+overlap check failed before implementation and passed afterward.
+
+A fresh local VTune software capture attributed 72.1% of noise-to-RGB8
+decode CPU time to inflate and 3.8% to output conversion. Inflater
+experiments did not show a reliable improvement, so the final follow-up
+leaves that code unchanged. A local same-process palette comparison of
+the `7da908b` experiment verified identical RGB bytes and measured a
+15.6% median reduction in thread cycles per decoded image relative to
+`51d5bc8`. Wall-clock pairs
+had a 0.348–3.484x middle-90% range under other machine activity, so they
+do not establish a reliable elapsed-time gain.
+
+An initial all-compiler gather experiment in
+[run 37152495720](https://github.com/bojosos/ptpng/actions/runs/37152495720)
+regressed Linux x64 palette-to-RGB throughput to 0.561x, with all seven
+pairs between 0.522 and 0.612x. Windows x64 measured 1.002x with a broad
+0.711–1.160x range. The final code enables RGB gathering only for MSVC;
+GCC and Clang retain their existing scalar packed-palette converter.
+
+The final source, `a16ee14`, passed all eight jobs in
+[CI run 37153322301](https://github.com/bojosos/ptpng/actions/runs/37153322301),
+including independent libpng parity on all five platforms and Linux
+ASan/UBSan checks. Local decoder and converter tests passed after adding
+the palette batch. [Fuzz run 37153322298](https://github.com/bojosos/ptpng/actions/runs/37153322298)
+passed 643,451 executions across decode, inflate, PNG encode and raw
+DEFLATE on x64/ARM64 with ASan/UBSan, using 30 seconds per target. These
+bounded campaigns do not establish correctness for every input.
+
 ## 1 October encoder compression
 
 The default encoder now scores every byte in each row, using AVX2/NEON
